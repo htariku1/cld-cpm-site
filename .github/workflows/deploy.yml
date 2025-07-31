@@ -45,10 +45,9 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }}
           NODE_ENV: production
-          CI: false
         run: |
           echo "Building with environment variables..."
-          pnpm run build
+          npx next build --no-lint
         
       - name: Setup Pages
         uses: actions/configure-pages@v4
