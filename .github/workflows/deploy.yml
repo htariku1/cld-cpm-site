@@ -32,7 +32,9 @@ jobs:
           version: 8
           
       - name: Install dependencies
-        run: pnpm install
+        run: |
+          pnpm install
+          pnpm list firebase
         
       - name: Build with environment variables
         env:
@@ -47,6 +49,8 @@ jobs:
           NODE_ENV: production
         run: |
           echo "Building with environment variables..."
+          echo "API Key: $NEXT_PUBLIC_FIREBASE_API_KEY"
+          echo "Project ID: $NEXT_PUBLIC_FIREBASE_PROJECT_ID"
           npx next build --no-lint
         
       - name: Setup Pages
