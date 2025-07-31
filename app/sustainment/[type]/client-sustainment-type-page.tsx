@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { TaskCard } from "@/components/task-card"
 import { formatDate } from "@/lib/utils"
+import { calculateLOEHealth } from "@/lib/health-utils"
 
 export function ClientSustainmentTypePage({ type }: { type: string }) {
   const [expandedLOE, setExpandedLOE] = useState<string | null>(null)
@@ -40,15 +41,7 @@ export function ClientSustainmentTypePage({ type }: { type: string }) {
   const allTypeTasks = tasks.filter(
     task => (task.category === "sustainment" || !task.category) && sustainmentLOEIds.includes(task.loeId) && (task.assignedTypes || []).includes(typeLabels[type as keyof typeof typeLabels] as 'CPMR' | 'IAPR' | 'TMTR')
   );
-
-  // Aggregate health and task count for the selected type across all LOEs
-  const getTypeAggregate = () => {
-    const totalTasks = allTypeTasks.length;
-    // If any health is 'At Risk' or 'Critical', show the worst status (placeholder logic)
-    let health = "Good";
-    // You can implement more advanced health logic if needed
-    return { totalTasks, health };
-  };
+  const calculatedHealth = calculateLOEHealth(allTypeTasks)
 
   const getHealthColor = (health: string) => {
     switch (health) {
@@ -81,20 +74,15 @@ export function ClientSustainmentTypePage({ type }: { type: string }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {(() => {
-              const { totalTasks, health } = getTypeAggregate();
-              return (
-                <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg border">
-                  <div>
-                    <h3 className="text-lg font-medium mb-2">{typeLabels[type as keyof typeof typeLabels]}</h3>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getHealthColor(health)}>{health}</Badge>
-                      <span className="text-sm text-gray-500">{totalTasks} tasks</span>
-                    </div>
-                  </div>
+            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg border">
+              <div>
+                <h3 className="text-lg font-medium mb-2">{typeLabels[type as keyof typeof typeLabels]}</h3>
+                <div className="flex items-center gap-2">
+                  <Badge className={getHealthColor(calculatedHealth)}>{calculatedHealth}</Badge>
+                  <span className="text-sm text-gray-500">{allTypeTasks.length} tasks</span>
                 </div>
-              );
-            })()}
+              </div>
+            </div>
           </CardContent>
         </Card>
 

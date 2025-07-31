@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Download, FileText, Presentation } from "lucide-react"
-import { sampleTasks } from "@/lib/data-context";
+import { useData } from "@/lib/data-context";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const exportOptions = {
@@ -33,6 +33,7 @@ const exportOptions = {
 const taskTypes = ["All", "CPMR", "IAPR", "TMTR", "formal", "informal"];
 
 export default function ExportCenterPage() {
+  const { loes, tasks, milestones } = useData();
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [exportFormat, setExportFormat] = useState<string>("")
   const [selectedLOEs, setSelectedLOEs] = useState<string[]>([])
@@ -60,7 +61,7 @@ export default function ExportCenterPage() {
   };
 
   // Filter tasks by selected LOE and assignedTypes only
-  const filteredTasks = sampleTasks.filter(task => {
+  const filteredTasks = tasks.filter(task => {
     const loeMatch = selectedLOEs.length === 0 || selectedLOEs.map(l => loeNameToId[l]).includes(task.loeId);
     const typeMatch =
       selectedTaskType === "All" ||
@@ -69,12 +70,12 @@ export default function ExportCenterPage() {
   });
 
   // Get all unique types from assignedTypes
-  const allTypes = Array.from(new Set(sampleTasks.flatMap(task => task.assignedTypes || [])));
+  const allTypes = Array.from(new Set(tasks.flatMap(task => task.assignedTypes || [])));
 
   // Group tasks by type, filtered by selected LOEs if any
-  const tasksByType: Record<string, typeof sampleTasks> = {};
+  const tasksByType: Record<string, typeof tasks> = {};
   allTypes.forEach(type => {
-    tasksByType[type] = sampleTasks.filter(task =>
+    tasksByType[type] = tasks.filter(task =>
       (task.assignedTypes || []).includes(type) &&
       (selectedLOEs.length === 0 || selectedLOEs.map(l => loeNameToId[l]).includes(task.loeId))
     );
@@ -95,11 +96,14 @@ export default function ExportCenterPage() {
     });
   };
 
-  const getSelectedIds = () => {
+  const getSelectedObjects = () => {
     const loeIds = selectedItems.filter((item: string) => loeNameToId[item]).map((item: string) => loeNameToId[item]);
     const taskIds = selectedTaskIds;
     const milestoneIds = selectedItems.filter((item: string) => milestoneNameToId[item]).map((item: string) => milestoneNameToId[item]);
-    return { loeIds, taskIds, milestoneIds };
+    const selectedLOEs = loes.filter(loe => loeIds.includes(loe.id));
+    const selectedTasks = tasks.filter(task => taskIds.includes(task.id));
+    const selectedMilestones = milestones.filter(milestone => milestoneIds.includes(milestone.id));
+    return { selectedLOEs, selectedTasks, selectedMilestones };
   };
 
   // Update handleItemToggle for LOEs to always sort
@@ -124,14 +128,14 @@ export default function ExportCenterPage() {
       return
     }
 
-    const { loeIds, taskIds, milestoneIds } = getSelectedIds();
+    const { selectedLOEs, selectedTasks, selectedMilestones } = getSelectedObjects();
 
     if (exportFormat === "powerpoint") {
       try {
         const response = await fetch("/api/generate-pptx", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ loeIds, taskIds, milestoneIds }),
+          body: JSON.stringify({ loes: selectedLOEs, tasks: selectedTasks, milestones: selectedMilestones }),
         });
         if (!response.ok) throw new Error("Failed to generate PowerPoint");
         const blob = await response.blob();
@@ -208,14 +212,15 @@ export default function ExportCenterPage() {
                       <AccordionTrigger>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{type}</span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="ml-2 px-2 py-0 h-6 text-xs"
+                          <span
+                            className="ml-2 px-2 py-0 h-6 text-xs inline-flex items-center justify-center rounded border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer select-none"
                             onClick={e => { e.stopPropagation(); handleSelectAllType(type); }}
+                            tabIndex={0}
+                            role="button"
+                            aria-pressed="false"
                           >
                             {tasksByType[type].every(task => selectedTaskIds.includes(task.id)) ? "Unselect All" : "Select All"}
-                          </Button>
+                          </span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>

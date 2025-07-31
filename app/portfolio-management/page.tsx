@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -25,9 +25,17 @@ import { formatDate, getHealthColor, getHealthLabel, getStatusColor } from "@/li
 import { LOECard } from "@/components/loe-card"
 import { TaskCard } from "@/components/task-card"
 import { MilestoneCard } from "@/components/milestone-card"
+import { calculateLOEHealth } from "@/lib/health-utils"
+import { Calendar as UiCalendar } from "@/components/ui/calendar"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { format, parse } from "date-fns"
+import { TaskForm } from "@/components/task-form"
+import { useRef } from "react"
+import { v4 as uuidv4 } from 'uuid'
+import { LOEForm } from "@/components/loe-form";
 
 export default function PortfolioManagementPage() {
-  const { loes, tasks, milestones } = useData()
+  const { loes, tasks, milestones, addTask, addLOE, addMilestone } = useData()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createType, setCreateType] = useState<"loe" | "milestone" | "task" | null>(null)
   const [taskType, setTaskType] = useState<"formal" | "informal" | null>(null)
@@ -35,6 +43,21 @@ export default function PortfolioManagementPage() {
   const [selectedLOE, setSelectedLOE] = useState<any>(null)
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [selectedMilestone, setSelectedMilestone] = useState<any>(null)
+  const [selectedLOEs, setSelectedLOEs] = useState<string[]>([])
+  const [showIssueInput, setShowIssueInput] = useState(false)
+  const [issueInput, setIssueInput] = useState("")
+  const [issues, setIssues] = useState<string[]>([])
+  const [selectedOtherOrgs, setSelectedOtherOrgs] = useState<string[]>([])
+  const [otherOrgSelect, setOtherOrgSelect] = useState("")
+  const [showOtherOrgInput, setShowOtherOrgInput] = useState(false)
+  const [otherOrgInput, setOtherOrgInput] = useState("")
+  const [showSubtaskInput, setShowSubtaskInput] = useState(false)
+  const [subtaskInput, setSubtaskInput] = useState("")
+  const [subtasks, setSubtasks] = useState<string[]>([])
+  const [taskCategory, setTaskCategory] = useState<"deployment" | "sustainment" | "">("")
+  const [activeTab, setActiveTab] = useState<string>("loes")
+  // You can customize this list as needed
+  const otherOrgOptions = ["DARPA", "DTRA", "NGA", "NSA", "DOE", "DHS"]
 
   const internalCoordOptions = ["JS J4", "OSD ER&O", "OSD (Log)", "OSD (MR)", "OSD(R&E)-MDJO"]
 
@@ -55,10 +78,19 @@ export default function PortfolioManagementPage() {
     ],
   }
 
+  const [assignedTypes, setAssignedTypes] = useState<string[]>([])
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [loeIds, setLoeIds] = useState<string[]>([])
+  const [associatedMilestones, setAssociatedMilestones] = useState<string[]>([])
+  const [internalCoord, setInternalCoord] = useState<string[]>([])
+  const [externalCoord, setExternalCoord] = useState<string[]>([])
+
   const resetDialog = () => {
     setCreateDialogOpen(false)
     setCreateType(null)
     setTaskType(null)
+    setTaskCategory("")
   }
 
   const getTasksForLOE = (loeId: string) => {
@@ -74,7 +106,16 @@ export default function PortfolioManagementPage() {
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900">Portfolio Management</h1>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <Dialog
+            open={createDialogOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                resetDialog();
+              } else {
+                setCreateDialogOpen(true);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
@@ -123,89 +164,11 @@ export default function PortfolioManagementPage() {
               )}
 
               {createType === "loe" && (
-                <div className="space-y-4 mt-6">
-                  <h3 className="text-lg font-semibold">Create New LOE</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="loe-name">LOE Name</Label>
-                      <Input id="loe-name" placeholder="Enter LOE name" />
-                    </div>
-                    <div>
-                      <Label htmlFor="loe-lead">Lead Org(s)</Label>
-                      <Input id="loe-lead" placeholder="Enter lead organizations" />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="loe-purpose">Purpose</Label>
-                    <Textarea id="loe-purpose" placeholder="Describe the purpose of this LOE" />
-                  </div>
-                  <div>
-                    <Label htmlFor="loe-supporting">Supporting Org(s)</Label>
-                    <Input id="loe-supporting" placeholder="Enter supporting organizations" />
-                  </div>
-                  <div>
-                    <Label htmlFor="cpmr-contrib">CPMR Contributions</Label>
-                    <Textarea id="cpmr-contrib" placeholder="Describe CPMR contributions" />
-                  </div>
-                  <div>
-                    <Label htmlFor="iapr-contrib">IAPR Contributions</Label>
-                    <Textarea id="iapr-contrib" placeholder="Describe IAPR contributions" />
-                  </div>
-                  <div>
-                    <Label htmlFor="tmtr-contrib">TMTR Contributions</Label>
-                    <Textarea id="tmtr-contrib" placeholder="Describe TMTR contributions" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={resetDialog}>Create LOE</Button>
-                    <Button variant="outline" onClick={() => setCreateType(null)}>
-                      Back
-                    </Button>
-                  </div>
-                </div>
+                <LOECreateForm onCreate={loe => { addLOE(loe); resetDialog(); }} onCancel={() => setCreateType(null)} />
               )}
 
               {createType === "milestone" && (
-                <div className="space-y-4 mt-6">
-                  <h3 className="text-lg font-semibold">Create New Milestone</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="milestone-name">Milestone Name</Label>
-                      <Input id="milestone-name" placeholder="Enter milestone name" />
-                    </div>
-                    <div>
-                      <Label htmlFor="milestone-date">Date</Label>
-                      <Input id="milestone-date" type="date" />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="milestone-desc">Description</Label>
-                    <Textarea id="milestone-desc" placeholder="Describe the milestone" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="milestone-lead">Lead Org(s)</Label>
-                      <Input id="milestone-lead" placeholder="Enter lead organizations" />
-                    </div>
-                    <div>
-                      <Label htmlFor="milestone-supporting">Supporting Org(s)</Label>
-                      <Input id="milestone-supporting" placeholder="Enter supporting organizations" />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="milestone-deliverable">Deliverable</Label>
-                    <Input id="milestone-deliverable" placeholder="Enter deliverable" />
-                  </div>
-                  <div>
-                    <Label htmlFor="milestone-loe">LOE and/or Tasks Associated</Label>
-                    <Textarea id="milestone-loe" placeholder="Enter associated LOEs and tasks" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={resetDialog}>Create Milestone</Button>
-                    <Button variant="outline" onClick={() => setCreateType(null)}>
-                      Back
-                    </Button>
-                  </div>
-                </div>
+                <MilestoneCreateForm loes={loes} onCreate={milestone => { addMilestone(milestone); resetDialog(); }} onCancel={() => setCreateType(null)} />
               )}
 
               {createType === "task" && !taskType && (
@@ -238,144 +201,27 @@ export default function PortfolioManagementPage() {
               )}
 
               {createType === "task" && taskType === "formal" && (
-                <div className="space-y-4 mt-6">
-                  <h3 className="text-lg font-semibold">Create Formal Task</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="task-name">Task Name</Label>
-                      <Input id="task-name" placeholder="Enter task name" />
-                    </div>
-                    <div>
-                      <Label htmlFor="task-owner">Task Owner</Label>
-                      <Input id="task-owner" placeholder="Enter task owner" />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="task-loe">LOE (can link to multiple)</Label>
-                    <Input id="task-loe" placeholder="Enter associated LOEs" />
-                  </div>
-                  <div>
-                    <Label htmlFor="task-desc">Description</Label>
-                    <Textarea id="task-desc" placeholder="Describe the task" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="task-product">Product</Label>
-                      <Input id="task-product" placeholder="Enter product" />
-                    </div>
-                    <div>
-                      <Label htmlFor="task-status">Status</Label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="not-started">Not Started</SelectItem>
-                          <SelectItem value="in-progress">In Progress</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="on-hold">On Hold</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="task-issues">Issues</Label>
-                    <Textarea id="task-issues" placeholder="Enter any issues (can add multiple)" />
-                  </div>
-
-                  <div>
-                    <Label className="text-base font-medium">Internal Coordination</Label>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {internalCoordOptions.map((option) => (
-                        <div key={option} className="flex items-center space-x-2">
-                          <Checkbox id={`internal-${option}`} />
-                          <Label htmlFor={`internal-${option}`} className="text-sm">
-                            {option}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-base font-medium">External Coordination</Label>
-                    <div className="space-y-4 mt-2">
-                      <div>
-                        <Label className="text-sm font-medium">Military Departments</Label>
-                        <div className="grid grid-cols-3 gap-2 mt-1">
-                          {externalCoordOptions.mildeps.map((option) => (
-                            <div key={option} className="flex items-center space-x-2">
-                              <Checkbox id={`mildep-${option}`} />
-                              <Label htmlFor={`mildep-${option}`} className="text-sm">
-                                {option}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Commands</Label>
-                        <div className="grid grid-cols-2 gap-2 mt-1">
-                          {externalCoordOptions.commands.map((option) => (
-                            <div key={option} className="flex items-center space-x-2">
-                              <Checkbox id={`command-${option}`} />
-                              <Label htmlFor={`command-${option}`} className="text-sm">
-                                {option}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="other-orgs">Other Organizations</Label>
-                        <Textarea id="other-orgs" placeholder="Enter other organizations (one per line)" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={resetDialog}>Create Formal Task</Button>
-                    <Button variant="outline" onClick={() => setTaskType(null)}>
-                      Back
-                    </Button>
-                  </div>
-                </div>
+                <TaskForm
+                  mode="add"
+                  loes={loes}
+                  milestones={milestones}
+                  onSubmit={(newTask) => {
+                    addTask(newTask);
+                    setActiveTab("tasks");
+                    resetDialog();
+                  }}
+                  onCancel={() => setTaskType(null)}
+                />
               )}
 
               {createType === "task" && taskType === "informal" && (
-                <div className="space-y-4 mt-6">
-                  <h3 className="text-lg font-semibold">Create Informal Task</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="informal-name">Name</Label>
-                      <Input id="informal-name" placeholder="Enter task name" />
-                    </div>
-                    <div>
-                      <Label htmlFor="informal-owner">Task Owner</Label>
-                      <Input id="informal-owner" placeholder="Enter task owner" />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="informal-desc">Description</Label>
-                    <Textarea id="informal-desc" placeholder="Describe the task" />
-                  </div>
-                  <div>
-                    <Label htmlFor="informal-product">Product</Label>
-                    <Input id="informal-product" placeholder="Enter product" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={resetDialog}>Create Informal Task</Button>
-                    <Button variant="outline" onClick={() => setTaskType(null)}>
-                      Back
-                    </Button>
-                  </div>
-                </div>
+                <InformalTaskForm onCreate={task => { addTask(task); setActiveTab("tasks"); resetDialog(); }} onCancel={() => setTaskType(null)} />
               )}
             </DialogContent>
           </Dialog>
         </div>
 
-        <Tabs defaultValue="loes" className="w-full">
+        <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="loes">Lines of Effort</TabsTrigger>
             <TabsTrigger value="milestones">Milestones</TabsTrigger>
@@ -384,97 +230,101 @@ export default function PortfolioManagementPage() {
 
           <TabsContent value="loes" className="space-y-6">
             <div className="grid gap-4">
-              {loes.map((loe) => (
-                <Card key={loe.id}>
-                  <Collapsible
-                    open={expandedLOE === loe.id}
-                    onOpenChange={() => setExpandedLOE(expandedLOE === loe.id ? null : loe.id)}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <CardHeader className="cursor-pointer hover:bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              {expandedLOE === loe.id ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                              {loe.name}
-                            </CardTitle>
-                            <CardDescription className="mt-2">{loe.purpose}</CardDescription>
+              {loes.map((loe) => {
+                const loeTasks = tasks.filter(task => task.loeId === loe.id)
+                const calculatedHealth = calculateLOEHealth(loeTasks)
+                return (
+                  <Card key={loe.id}>
+                    <Collapsible
+                      open={expandedLOE === loe.id}
+                      onOpenChange={() => setExpandedLOE(expandedLOE === loe.id ? null : loe.id)}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <CardHeader className="cursor-pointer hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                {expandedLOE === loe.id ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                                {loe.name}
+                              </CardTitle>
+                              <CardDescription className="mt-2">{loe.purpose}</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge className={getHealthColor(calculatedHealth)}>
+                                {getHealthLabel(calculatedHealth)}
+                              </Badge>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedLOE(loe)
+                                }}
+                              >
+                                View Details
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Badge className={getHealthColor(loe.overallHealth)}>
-                              {getHealthLabel(loe.overallHealth)}
-                            </Badge>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedLOE(loe)
-                              }}
-                            >
-                              View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </CollapsibleTrigger>
+                        </CardHeader>
+                      </CollapsibleTrigger>
 
-                    <CollapsibleContent>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Associated Tasks</h4>
-                            {getTasksForLOE(loe.id).length > 0 ? (
-                              <div className="space-y-2">
-                                {getTasksForLOE(loe.id).map((task) => (
-                                  <div
-                                    key={task.id}
-                                    className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
-                                    onClick={() => setSelectedTask(task)}
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <h5 className="font-medium">{task.name}</h5>
-                                        <p className="text-xs text-gray-600">Owner: {task.owner}</p>
+                      <CollapsibleContent>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <h4 className="font-semibold text-gray-900 mb-3">Associated Tasks</h4>
+                              {getTasksForLOE(loe.id).length > 0 ? (
+                                <div className="space-y-2">
+                                  {getTasksForLOE(loe.id).map((task) => (
+                                    <div
+                                      key={task.id}
+                                      className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
+                                      onClick={() => setSelectedTask(task)}
+                                    >
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <h5 className="font-medium">{task.name}</h5>
+                                          <p className="text-xs text-gray-600">Assignee: {Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</p>
+                                        </div>
+                                        <Badge variant="outline">{task.status}</Badge>
                                       </div>
-                                      <Badge variant="outline">{task.status}</Badge>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-center py-4">No tasks associated with this LOE yet.</p>
-                            )}
-                          </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 text-center py-4">No tasks associated with this LOE yet.</p>
+                              )}
+                            </div>
 
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Milestones</h4>
-                            {getMilestonesForLOE(loe.id).length > 0 ? (
-                              <div className="space-y-2">
-                                {getMilestonesForLOE(loe.id).map((milestone) => (
-                                  <div key={milestone.id} className="border rounded-lg p-3">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="h-4 w-4 text-orange-500" />
-                                      <h5 className="font-medium">{milestone.name}</h5>
+                            <div>
+                              <h4 className="font-semibold text-gray-900 mb-3">Milestones</h4>
+                              {getMilestonesForLOE(loe.id).length > 0 ? (
+                                <div className="space-y-2">
+                                  {getMilestonesForLOE(loe.id).map((milestone) => (
+                                    <div key={milestone.id} className="border rounded-lg p-3">
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className="h-4 w-4 text-orange-500" />
+                                        <h5 className="font-medium">{milestone.name}</h5>
+                                      </div>
+                                      <p className="text-xs text-gray-600 mt-1">{formatDate(milestone.date)}</p>
                                     </div>
-                                    <p className="text-xs text-gray-600 mt-1">{formatDate(milestone.date)}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-center py-4">No milestones for this LOE yet.</p>
-                            )}
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 text-center py-4">No milestones for this LOE yet.</p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Card>
-              ))}
+                        </CardContent>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </Card>
+                )
+              })}
             </div>
           </TabsContent>
 
@@ -517,54 +367,184 @@ export default function PortfolioManagementPage() {
 
           <TabsContent value="tasks" className="space-y-6">
             <div className="grid gap-4">
-              {tasks.map((task) => {
-                const associatedLOE = loes.find((loe) => loe.id === task.loeId)
+              {/* Group tasks by category */}
+              {(() => {
+                const deploymentTasks = tasks.filter(task => task.category === 'deployment');
+                const sustainmentTasks = tasks.filter(task => task.category === 'sustainment');
+                const uncategorizedTasks = tasks.filter(task => !task.category || task.type === 'informal');
                 return (
-                  <Card key={task.id} className="overflow-hidden">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={task.type === "formal" ? "default" : "secondary"}>
-                            {task.type === "formal" ? "Formal" : "Informal"}
-                          </Badge>
-                          <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
-                          View Details
-                        </Button>
-                      </div>
-                      <CardTitle className="text-lg mt-2">{task.name}</CardTitle>
-                      <CardDescription className="line-clamp-2">{task.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm font-medium text-gray-500">Owner:</span>
-                            <span className="text-sm">{task.owner}</span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm font-medium text-gray-500">Timeline:</span>
-                            <span className="text-sm">
-                              {formatDate(task.startDate)} - {formatDate(task.endDate)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm font-medium text-gray-500">LOE:</span>
-                            <span className="text-sm">{associatedLOE?.name || "None"}</span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm font-medium text-gray-500">Deliverable:</span>
-                            <span className="text-sm">{task.deliverable}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+                  <>
+                    {deploymentTasks.length > 0 && (
+                      <>
+                        <h3 className="text-lg font-bold text-black mb-2 mt-4">Deployment</h3>
+                        {deploymentTasks.map((task, idx) => {
+                          const associatedLOE = loes.find((loe) => loe.id === task.loeId)
+                          return (
+                            <Card key={task.id || idx} className="overflow-hidden">
+                              <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    {task.category && (
+                                      <Badge variant="secondary" className="capitalize">{task.category}</Badge>
+                                    )}
+                                    <Badge variant={task.type === "formal" ? "default" : "secondary"}>
+                                      {task.type === "formal" ? "Formal" : "Informal"}
+                                    </Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                  </div>
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
+                                    View Details
+                                  </Button>
+                                </div>
+                                <CardTitle className="text-lg mt-2">{task.name}</CardTitle>
+                                <CardDescription className="line-clamp-2">{task.description}</CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Assignee:</span>
+                                      <span className="text-sm">{Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Timeline:</span>
+                                      <span className="text-sm">
+                                        {formatDate(task.startDate)} - {formatDate(task.endDate)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">LOE:</span>
+                                      <span className="text-sm">{associatedLOE?.name || "None"}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Deliverable:</span>
+                                      <span className="text-sm">{task.deliverable}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </>
+                    )}
+                    {sustainmentTasks.length > 0 && (
+                      <>
+                        <h3 className="text-lg font-bold text-black mb-2 mt-4">Sustainment</h3>
+                        {sustainmentTasks.map((task, idx) => {
+                          const associatedLOE = loes.find((loe) => loe.id === task.loeId)
+                          return (
+                            <Card key={task.id || idx} className="overflow-hidden">
+                              <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    {task.category && (
+                                      <Badge variant="secondary" className="capitalize">{task.category}</Badge>
+                                    )}
+                                    <Badge variant={task.type === "formal" ? "default" : "secondary"}>
+                                      {task.type === "formal" ? "Formal" : "Informal"}
+                                    </Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                  </div>
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
+                                    View Details
+                                  </Button>
+                                </div>
+                                <CardTitle className="text-lg mt-2">{task.name}</CardTitle>
+                                <CardDescription className="line-clamp-2">{task.description}</CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Assignee:</span>
+                                      <span className="text-sm">{Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Timeline:</span>
+                                      <span className="text-sm">
+                                        {formatDate(task.startDate)} - {formatDate(task.endDate)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">LOE:</span>
+                                      <span className="text-sm">{associatedLOE?.name || "None"}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Deliverable:</span>
+                                      <span className="text-sm">{task.deliverable}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </>
+                    )}
+                    {uncategorizedTasks.length > 0 && (
+                      <>
+                        <h3 className="text-lg font-bold text-black mb-2 mt-4">Uncategorized</h3>
+                        {uncategorizedTasks.map((task, idx) => {
+                          const associatedLOE = loes.find((loe) => loe.id === task.loeId)
+                          return (
+                            <Card key={task.id || idx} className="overflow-hidden">
+                              <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    {task.category && (
+                                      <Badge variant="secondary" className="capitalize">{task.category}</Badge>
+                                    )}
+                                    <Badge variant={task.type === "formal" ? "default" : "secondary"}>
+                                      {task.type === "formal" ? "Formal" : "Informal"}
+                                    </Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                  </div>
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
+                                    View Details
+                                  </Button>
+                                </div>
+                                <CardTitle className="text-lg mt-2">{task.name}</CardTitle>
+                                <CardDescription className="line-clamp-2">{task.description}</CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Assignee:</span>
+                                      <span className="text-sm">{Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Timeline:</span>
+                                      <span className="text-sm">
+                                        {formatDate(task.startDate)} - {formatDate(task.endDate)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">LOE:</span>
+                                      <span className="text-sm">{associatedLOE?.name || "None"}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-sm font-medium text-gray-500">Deliverable:</span>
+                                      <span className="text-sm">{task.deliverable}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </TabsContent>
         </Tabs>
@@ -573,11 +553,449 @@ export default function PortfolioManagementPage() {
         <LOECard loe={selectedLOE} isOpen={!!selectedLOE} onClose={() => setSelectedLOE(null)} />
 
         {/* Task Detail Dialog */}
-        <TaskCard task={selectedTask} isOpen={!!selectedTask} onClose={() => setSelectedTask(null)} />
+        <TaskCard task={tasks.find(t => t.id === selectedTask?.id) || null} isOpen={!!selectedTask} onClose={() => setSelectedTask(null)} />
 
         {/* Milestone Detail Dialog */}
-        <MilestoneCard milestone={selectedMilestone} isOpen={!!selectedMilestone} onClose={() => setSelectedMilestone(null)} />
+        <MilestoneCard 
+          milestone={selectedMilestone ? milestones.find(m => m.id === selectedMilestone.id) : null} 
+          isOpen={!!selectedMilestone} 
+          onClose={() => setSelectedMilestone(null)} 
+        />
       </main>
     </div>
   )
 }
+
+// --- LOE Create Form ---
+function generateLoeId() {
+  return "loe-" + Math.random().toString(36).slice(2, 10)
+}
+function LOECreateForm({ onCreate, onCancel }: { onCreate: (loe: any) => void, onCancel: () => void }) {
+  const { milestones } = useData();
+  return (
+    <LOEForm
+      initialValues={{}}
+      milestones={milestones}
+      onSubmit={(loe: any) => onCreate(loe)}
+      onCancel={onCancel}
+      submitLabel="Create LOE"
+    />
+  )
+}
+
+// --- Milestone Create Form ---
+function generateMilestoneId() {
+  return uuidv4();
+}
+function MilestoneCreateForm({ loes, onCreate, onCancel }: { loes: any[], onCreate: (milestone: any) => void, onCancel: () => void }) {
+  const nameRef = useRef<HTMLInputElement>(null)
+  const [date, setDate] = useState("")
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const orgOptions = ["CPMR", "IAPR", "TMTR"]
+  const [leadOrgs, setLeadOrgs] = useState<string[]>([])
+  const [supportingOrgs, setSupportingOrgs] = useState<string[]>([])
+  const deliverableRef = useRef<HTMLInputElement>(null)
+  const [selectedLOEs, setSelectedLOEs] = useState<string[]>([])
+  const { tasks } = useData();
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([])
+  return (
+    <div className="space-y-4 mt-6">
+      <h3 className="text-lg font-semibold">Create New Milestone</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="milestone-name">Milestone Name</Label>
+          <Input id="milestone-name" placeholder="Enter milestone name" ref={nameRef} />
+        </div>
+        <div>
+          <Label htmlFor="milestone-date">Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Input
+                id="milestone-date"
+                value={date ? format(parse(date, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                placeholder="Select date"
+                readOnly
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <UiCalendar
+                mode="single"
+                selected={date ? parse(date, "yyyy-MM-dd", new Date()) : undefined}
+                onSelect={d => setDate(d ? format(d, "yyyy-MM-dd") : "")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label>Lead Org(s)</Label>
+          <div className="flex flex-row gap-2 mt-1">
+            {orgOptions.map(option => (
+              <label key={option} className="flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={leadOrgs.includes(option)}
+                  onChange={e => {
+                    if (e.target.checked) setLeadOrgs([...leadOrgs, option])
+                    else setLeadOrgs(leadOrgs.filter(o => o !== option))
+                  }}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+          {leadOrgs.length > 0 && (
+            <div className="text-xs text-gray-600 mt-1">
+              <span className="font-semibold">Selected:</span> {leadOrgs.join(", ")}
+            </div>
+          )}
+        </div>
+        <div>
+          <Label>Supporting Org(s)</Label>
+          <div className="flex flex-row gap-2 mt-1">
+            {orgOptions.map(option => (
+              <label key={option} className="flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={supportingOrgs.includes(option)}
+                  onChange={e => {
+                    if (e.target.checked) setSupportingOrgs([...supportingOrgs, option])
+                    else setSupportingOrgs(supportingOrgs.filter(o => o !== option))
+                  }}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+          {supportingOrgs.length > 0 && (
+            <div className="text-xs text-gray-600 mt-1">
+              <span className="font-semibold">Selected:</span> {supportingOrgs.join(", ")}
+            </div>
+          )}
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="milestone-desc">Description</Label>
+        <Textarea id="milestone-desc" placeholder="Describe the milestone" ref={descRef} />
+      </div>
+      <div>
+        <Label htmlFor="milestone-deliverable">Deliverable</Label>
+        <Input id="milestone-deliverable" placeholder="Enter deliverable" ref={deliverableRef} />
+      </div>
+      <div>
+        <Label>Associated LOEs</Label>
+        <div className="max-h-40 overflow-y-auto border rounded-md p-3 mt-2">
+          {loes.map((loe) => (
+            <div key={loe.id} className="flex items-center space-x-2 py-1">
+              <input
+                type="checkbox"
+                id={`create-loe-${loe.id}`}
+                checked={selectedLOEs.includes(loe.id)}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setSelectedLOEs(prev => [...prev, loe.id])
+                    // Add tasks for this LOE to selectedTasks
+                    setSelectedTasks(prev => Array.from(new Set([...prev, ...tasks.filter(task => task.loeId === loe.id).map(task => task.id)])))
+                  } else {
+                    const newLOEs = selectedLOEs.filter(id => id !== loe.id)
+                    // Remove tasks for this LOE from selectedTasks
+                    const loeTaskIds = tasks.filter(task => task.loeId === loe.id).map(task => task.id)
+                    setSelectedLOEs(newLOEs)
+                    setSelectedTasks(prev => prev.filter(id => !loeTaskIds.includes(id)))
+                  }
+                }}
+              />
+              <Label htmlFor={`create-loe-${loe.id}`}>{loe.name}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <Label>Associated Tasks</Label>
+        <div className="max-h-40 overflow-y-auto border rounded-md p-3 mt-2">
+          {tasks.filter(task => selectedLOEs.includes(task.loeId)).length > 0 ? (
+            tasks.filter(task => selectedLOEs.includes(task.loeId)).map(task => (
+              <div key={task.id} className="flex items-center space-x-2 py-1">
+                <input
+                  type="checkbox"
+                  id={`create-task-${task.id}`}
+                  checked={selectedTasks.includes(task.id)}
+                  onChange={e => {
+                    if (e.target.checked) setSelectedTasks(prev => [...prev, task.id])
+                    else setSelectedTasks(prev => prev.filter(id => id !== task.id))
+                  }}
+                />
+                <Label htmlFor={`create-task-${task.id}`}>{task.name}</Label>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500 text-sm">No tasks available for selected LOEs</p>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          onClick={() => {
+            const milestone = {
+              id: uuidv4(),
+              name: nameRef.current?.value || "",
+              description: descRef.current?.value || "",
+              date: date || new Date().toISOString().slice(0, 10),
+              leadOrg: leadOrgs.join(", "),
+              supportingOrg: supportingOrgs.join(", "),
+              deliverable: deliverableRef.current?.value || "",
+              loeIds: selectedLOEs,
+              taskIds: selectedTasks,
+            }
+            onCreate(milestone)
+          }}
+        >
+          Create Milestone
+        </Button>
+        <Button variant="outline" onClick={onCancel}>
+          Back
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function InformalTaskForm({ onCreate, onCancel }: { onCreate: (task: any) => void, onCancel: () => void }) {
+  const nameRef = useRef<HTMLInputElement>(null)
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const productRef = useRef<HTMLInputElement>(null)
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [assignedTypes, setAssignedTypes] = useState<string[]>([])
+  const orgOptions = ["CPMR", "IAPR", "TMTR"]
+  return (
+    <div className="space-y-4 mt-6">
+      <h3 className="text-lg font-semibold">Create Informal Task</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="informal-name">Name</Label>
+          <Input id="informal-name" placeholder="Enter task name" ref={nameRef} />
+        </div>
+        <div>
+          <Label>Assignee</Label>
+          <div className="flex gap-2 mt-2">
+            {orgOptions.map((type) => (
+              <div key={type} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`informal-assignee-${type}`}
+                  checked={assignedTypes.includes(type)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAssignedTypes([...assignedTypes, type])
+                    } else {
+                      setAssignedTypes(assignedTypes.filter((t) => t !== type))
+                    }
+                  }}
+                />
+                <Label htmlFor={`informal-assignee-${type}`}>{type}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="informal-start-date">Start Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Input
+                id="informal-start-date"
+                value={startDate ? format(parse(startDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                placeholder="Select start date"
+                readOnly
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <UiCalendar
+                mode="single"
+                selected={startDate ? parse(startDate, "yyyy-MM-dd", new Date()) : undefined}
+                onSelect={date => setStartDate(date ? format(date, "yyyy-MM-dd") : "")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div>
+          <Label htmlFor="informal-end-date">End Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Input
+                id="informal-end-date"
+                value={endDate ? format(parse(endDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                placeholder="Select end date"
+                readOnly
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <UiCalendar
+                mode="single"
+                selected={endDate ? parse(endDate, "yyyy-MM-dd", new Date()) : undefined}
+                onSelect={date => setEndDate(date ? format(date, "yyyy-MM-dd") : "")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="informal-desc">Description</Label>
+        <Textarea id="informal-desc" placeholder="Describe the task" ref={descRef} />
+      </div>
+      <div>
+        <Label htmlFor="informal-product">Product</Label>
+        <Input id="informal-product" placeholder="Enter product" ref={productRef} />
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={() => {
+          const task = {
+            id: uuidv4(),
+            name: nameRef.current?.value || "",
+            owner: assignedTypes.join(", "),
+            assignedTypes,
+            description: descRef.current?.value || "",
+            deliverable: productRef.current?.value || "",
+            status: "Not Started",
+            type: "informal",
+            startDate: startDate || new Date().toISOString().slice(0, 10),
+            endDate: endDate || new Date().toISOString().slice(0, 10),
+            loeId: "",
+            issues: [], // Should be array of objects, but empty is fine for new
+          }
+          onCreate(task)
+        }}>Create Informal Task</Button>
+        <Button variant="outline" onClick={onCancel}>
+          Back
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function InformalTaskFormEdit({ initialValues, onSubmit, onCancel }: { initialValues: any, onSubmit: (task: any) => void, onCancel: () => void }) {
+  const nameRef = useRef<HTMLInputElement>(null)
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const productRef = useRef<HTMLInputElement>(null)
+  const [startDate, setStartDate] = useState(initialValues.startDate || "")
+  const [endDate, setEndDate] = useState(initialValues.endDate || "")
+  const [assignedTypes, setAssignedTypes] = useState<string[]>(initialValues.assignedTypes || (initialValues.owner ? initialValues.owner.split(/, ?/) : []))
+  const orgOptions = ["CPMR", "IAPR", "TMTR"]
+  // Set initial values on mount
+  useEffect(() => {
+    if (nameRef.current) nameRef.current.value = initialValues.name || ""
+    if (descRef.current) descRef.current.value = initialValues.description || ""
+    if (productRef.current) productRef.current.value = initialValues.deliverable || ""
+    setStartDate(initialValues.startDate || "")
+    setEndDate(initialValues.endDate || "")
+    setAssignedTypes(initialValues.assignedTypes || (initialValues.owner ? initialValues.owner.split(/, ?/) : []))
+  }, [initialValues])
+  return (
+    <div className="space-y-4 mt-6">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="informal-edit-name">Name</Label>
+          <Input id="informal-edit-name" placeholder="Enter task name" ref={nameRef} defaultValue={initialValues.name || ""} />
+        </div>
+        <div>
+          <Label>Assignee</Label>
+          <div className="flex gap-2 mt-2">
+            {orgOptions.map((type) => (
+              <div key={type} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`informal-edit-assignee-${type}`}
+                  checked={assignedTypes.includes(type)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAssignedTypes([...assignedTypes, type])
+                    } else {
+                      setAssignedTypes(assignedTypes.filter((t) => t !== type))
+                    }
+                  }}
+                />
+                <Label htmlFor={`informal-edit-assignee-${type}`}>{type}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="informal-edit-start-date">Start Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Input
+                id="informal-edit-start-date"
+                value={startDate ? format(parse(startDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                placeholder="Select start date"
+                readOnly
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <UiCalendar
+                mode="single"
+                selected={startDate ? parse(startDate, "yyyy-MM-dd", new Date()) : undefined}
+                onSelect={date => setStartDate(date ? format(date, "yyyy-MM-dd") : "")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div>
+          <Label htmlFor="informal-edit-end-date">End Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Input
+                id="informal-edit-end-date"
+                value={endDate ? format(parse(endDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                placeholder="Select end date"
+                readOnly
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <UiCalendar
+                mode="single"
+                selected={endDate ? parse(endDate, "yyyy-MM-dd", new Date()) : undefined}
+                onSelect={date => setEndDate(date ? format(date, "yyyy-MM-dd") : "")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="informal-edit-desc">Description</Label>
+        <Textarea id="informal-edit-desc" placeholder="Describe the task" ref={descRef} defaultValue={initialValues.description || ""} />
+      </div>
+      <div>
+        <Label htmlFor="informal-edit-product">Product</Label>
+        <Input id="informal-edit-product" placeholder="Enter product" ref={productRef} defaultValue={initialValues.deliverable || ""} />
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={() => {
+          const task = {
+            ...initialValues,
+            name: nameRef.current?.value || "",
+            owner: assignedTypes.join(", "),
+            assignedTypes,
+            description: descRef.current?.value || "",
+            deliverable: productRef.current?.value || "",
+            type: "informal",
+            startDate: startDate || new Date().toISOString().slice(0, 10),
+            endDate: endDate || new Date().toISOString().slice(0, 10),
+          }
+          onSubmit(task)
+        }}>Save Changes</Button>
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+

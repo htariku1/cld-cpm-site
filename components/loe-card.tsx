@@ -8,12 +8,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Calendar, Users, Target, CheckCircle, MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { useData, type LOE } from "@/lib/data-context"
 import { formatDate, getHealthLabel, getHealthColor } from "@/lib/utils"
+import { calculateLOEHealth } from "@/lib/health-utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { LOEForm } from "@/components/loe-form";
 
 interface LOECardProps {
   loe: LOE | null
@@ -22,51 +24,61 @@ interface LOECardProps {
 }
 
 export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
-  const { getTaskCountForLOE, getDurationInDays, milestones } = useData()
+  const { getTaskCountForLOE, milestones, tasks, deleteLOE, addLOE, updateTask } = useData()
+
+  // Local duration calculation (inclusive of both start and end date)
+  function getDurationInDays(startDate?: string, endDate?: string) {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const diffTime = end.getTime() - start.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+  }
 
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [editFormData, setEditFormData] = useState({
-    name: loe?.name || "",
-    purpose: loe?.purpose || "",
-    deliverable: loe?.deliverable || "",
-    startDate: loe?.startDate || "",
-    endDate: loe?.endDate || "",
-    leadOrg: loe?.leadOrg || "",
-    supportingOrg: loe?.supportingOrg || "",
-    cpmrContributions: loe?.cpmrContributions || "",
-    iaprContributions: loe?.iaprContributions || "",
-    tmtrContributions: loe?.tmtrContributions || "",
-    overallHealth: loe?.overallHealth || "Good",
-    associatedMilestones: [] as string[],
-  })
+  // For checkboxes, split comma-separated orgs into arrays
+  const orgOptions = ["CPMR", "IAPR", "TMTR"]
+  const [editName, setEditName] = useState(loe?.name || "")
+  const [editDescription, setEditDescription] = useState(loe?.purpose || "")
+  const [editDeliverable, setEditDeliverable] = useState(loe?.deliverable || "")
+  const [editLeadOrgs, setEditLeadOrgs] = useState<string[]>(loe?.leadOrg ? loe.leadOrg.split(/, ?/) : [])
+  const [editSupportingOrgs, setEditSupportingOrgs] = useState<string[]>(loe?.supportingOrg ? loe.supportingOrg.split(/, ?/) : [])
+  const [editCPMR, setEditCPMR] = useState(loe?.cpmrContributions || "")
+  const [editIAPR, setEditIAPR] = useState(loe?.iaprContributions || "")
+  const [editTMTR, setEditTMTR] = useState(loe?.tmtrContributions || "")
+  const [editMilestones, setEditMilestones] = useState<string[]>(milestones.filter(m => m.loeIds.includes(loe?.id || "")).map(m => m.id))
 
   if (!loe) return null
 
   const taskCount = getTaskCountForLOE(loe.id)
   const duration = getDurationInDays(loe.startDate, loe.endDate)
   const loeMilestones = milestones.filter((milestone) => milestone.loeIds.includes(loe.id))
+  const loeTasks = tasks.filter(task => task.loeId === loe.id)
+  const calculatedHealth = calculateLOEHealth(loeTasks)
 
   const handleEdit = () => {
-    setEditFormData({
-      name: loe.name,
-      purpose: loe.purpose,
-      deliverable: loe.deliverable,
-      startDate: loe.startDate,
-      endDate: loe.endDate,
-      leadOrg: loe.leadOrg,
-      supportingOrg: loe.supportingOrg,
-      cpmrContributions: loe.cpmrContributions,
-      iaprContributions: loe.iaprContributions,
-      tmtrContributions: loe.tmtrContributions,
-      overallHealth: loe.overallHealth,
-      associatedMilestones: loeMilestones.map((m) => m.id), // Pre-select current milestones
-    })
+    setEditName(loe.name)
+    setEditDescription(loe.purpose)
+    setEditDeliverable(loe.deliverable)
+    setEditLeadOrgs(loe.leadOrg ? loe.leadOrg.split(/, ?/) : [])
+    setEditSupportingOrgs(loe.supportingOrg ? loe.supportingOrg.split(/, ?/) : [])
+    setEditCPMR(loe.cpmrContributions)
+    setEditIAPR(loe.iaprContributions)
+    setEditTMTR(loe.tmtrContributions)
+    setEditMilestones(milestones.filter(m => m.loeIds.includes(loe.id)).map(m => m.id))
     setEditDialogOpen(true)
   }
 
   const handleDelete = () => {
-    console.log("Delete LOE:", loe.id)
-    // TODO: Implement delete functionality
+    if (loe) {
+      deleteLOE(loe.id)
+      onClose()
+    }
+  }
+
+  // Add a helper to validate required fields
+  function isValidLOE(loe: any) {
+    return loe.name && loe.purpose && loe.startDate && loe.endDate && loe.deliverable && loe.leadOrg && loe.supportingOrg;
   }
 
   return (
@@ -78,9 +90,16 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
             <div className="relative flex items-start justify-between">
               <div className="flex-1">
                 <DialogTitle className="text-2xl font-bold text-gray-900 mb-2">{loe.name}</DialogTitle>
-                <p className="text-sm text-gray-600">
-                  {formatDate(loe.startDate)} – {formatDate(loe.endDate)} ({duration} days)
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">Start Date</span>
+                  <span className="text-sm text-gray-900">{loe.startDate ? formatDate(loe.startDate) : "—"}</span>
+                  <span className="mx-2 text-gray-400">—</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">End Date</span>
+                  <span className="text-sm text-gray-900">{loe.endDate ? formatDate(loe.endDate) : "—"}</span>
+                  <span className="mx-2 text-gray-400">—</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">Duration</span>
+                  <span className="text-sm text-gray-900">{duration} day{duration !== 1 ? "s" : ""}</span>
+                </div>
               </div>
               <div className="absolute right-4 top-4 z-20">
                 <DropdownMenu>
@@ -119,7 +138,7 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wide">Overall Health</p>
-                    <Badge className={getHealthColor(loe.overallHealth)}>{getHealthLabel(loe.overallHealth)}</Badge>
+                    <Badge className={getHealthColor(calculatedHealth)}>{getHealthLabel(calculatedHealth)}</Badge>
                   </div>
                 </div>
               </Card>
@@ -222,182 +241,32 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
             <DialogHeader>
               <DialogTitle>Edit LOE</DialogTitle>
             </DialogHeader>
-            <div className="space-y-6 mt-6">
-              <div>
-                <Label htmlFor="edit-loe-name">LOE Name</Label>
-                <Input
-                  id="edit-loe-name"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-loe-purpose">Purpose</Label>
-                <Textarea
-                  id="edit-loe-purpose"
-                  value={editFormData.purpose}
-                  onChange={(e) => setEditFormData({ ...editFormData, purpose: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-loe-deliverable">LOE Deliverable</Label>
-                <Input
-                  id="edit-loe-deliverable"
-                  value={editFormData.deliverable}
-                  onChange={(e) => setEditFormData({ ...editFormData, deliverable: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="edit-loe-start-date">Start Date</Label>
-                  <Input
-                    id="edit-loe-start-date"
-                    type="date"
-                    value={editFormData.startDate}
-                    onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-loe-end-date">End Date</Label>
-                  <Input
-                    id="edit-loe-end-date"
-                    type="date"
-                    value={editFormData.endDate}
-                    onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-overall-health">Overall Health</Label>
-                  <Select
-                    value={editFormData.overallHealth}
-                    onValueChange={(value) => setEditFormData({ ...editFormData, overallHealth: value as 'Good' | 'At Risk' | 'Critical' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Good">Good</SelectItem>
-                      <SelectItem value="At Risk">At Risk</SelectItem>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-lead-org">Lead Organization(s)</Label>
-                  <Input
-                    id="edit-lead-org"
-                    value={editFormData.leadOrg}
-                    onChange={(e) => setEditFormData({ ...editFormData, leadOrg: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-supporting-org">Supporting Organization(s)</Label>
-                  <Input
-                    id="edit-supporting-org"
-                    value={editFormData.supportingOrg}
-                    onChange={(e) => setEditFormData({ ...editFormData, supportingOrg: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="edit-cpmr-contrib">CPMR Contributions</Label>
-                <Textarea
-                  id="edit-cpmr-contrib"
-                  value={editFormData.cpmrContributions}
-                  onChange={(e) => setEditFormData({ ...editFormData, cpmrContributions: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-iapr-contrib">IAPR Contributions</Label>
-                <Textarea
-                  id="edit-iapr-contrib"
-                  value={editFormData.iaprContributions}
-                  onChange={(e) => setEditFormData({ ...editFormData, iaprContributions: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-tmtr-contrib">TMTR Contributions</Label>
-                <Textarea
-                  id="edit-tmtr-contrib"
-                  value={editFormData.tmtrContributions}
-                  onChange={(e) => setEditFormData({ ...editFormData, tmtrContributions: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label>Associated Milestones</Label>
-                <div className="max-h-40 overflow-y-auto border rounded-md p-3 mt-2">
-                  {milestones
-                    .filter((milestone) => milestone.loeIds.includes(loe.id))
-                    .map((milestone) => (
-                      <div
-                        key={milestone.id}
-                        className="flex items-start space-x-2 py-2 border-b border-gray-100 last:border-b-0"
-                      >
-                        <Checkbox
-                          id={`loe-milestone-${milestone.id}`}
-                          checked={editFormData.associatedMilestones?.includes(milestone.id) || false}
-                          onCheckedChange={(checked) => {
-                            const currentMilestones = editFormData.associatedMilestones || []
-                            if (checked) {
-                              setEditFormData({
-                                ...editFormData,
-                                associatedMilestones: [...currentMilestones, milestone.id],
-                              })
-                            } else {
-                              setEditFormData({
-                                ...editFormData,
-                                associatedMilestones: currentMilestones.filter((id) => id !== milestone.id),
-                              })
-                            }
-                          }}
-                        />
-                        <div className="flex-1">
-                          <Label htmlFor={`loe-milestone-${milestone.id}`} className="text-sm font-medium">
-                            {milestone.name}
-                          </Label>
-                          <p className="text-xs text-gray-600 mt-1">{milestone.description}</p>
-                          <p className="text-xs text-gray-500">Date: {formatDate(milestone.date)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  {milestones.filter((milestone) => milestone.loeIds.includes(loe.id)).length === 0 && (
-                    <p className="text-gray-500 text-sm text-center py-4">
-                      No milestones associated with this LOE yet.
-                    </p>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Select milestones that are directly associated with this LOE's deliverables and timeline.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    console.log("Save LOE:", editFormData)
-                    setEditDialogOpen(false)
-                  }}
-                >
-                  Save Changes
-                </Button>
-                <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
+            <LOEForm
+              initialValues={{
+                ...loe,
+                milestoneIds: milestones.filter(m => m.loeIds.includes(loe.id)).map(m => m.id),
+                startDate: loe.startDate,
+                endDate: loe.endDate
+              }}
+              milestones={milestones}
+              onSubmit={(updatedLoe: any) => {
+                if (!isValidLOE(updatedLoe)) {
+                  alert('Please fill in all required fields.');
+                  return;
+                }
+                if (typeof updateTask === 'function') {
+                  updateTask(loe.id, updatedLoe);
+                } else {
+                  addLOE(updatedLoe);
+                }
+                setEditDialogOpen(false)
+              }}
+              onCancel={() => setEditDialogOpen(false)}
+              submitLabel="Save Changes"
+            />
           </DialogContent>
         </Dialog>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

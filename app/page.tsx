@@ -25,6 +25,10 @@ export default function HomePage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [scopingFile, setScopingFile] = useState<File | null>(null)
+  const [doddDocumentOpen, setDoddDocumentOpen] = useState(false)
+  const [doddUploadDialogOpen, setDoddUploadDialogOpen] = useState(false)
+  const [doddPendingFile, setDoddPendingFile] = useState<File | null>(null)
+  const [doddFile, setDoddFile] = useState<File | null>(null)
 
   const handleUpload = () => {
     if (pendingFile) {
@@ -40,6 +44,28 @@ export default function HomePage() {
     const a = document.createElement('a');
     a.href = url;
     a.download = scopingFile.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+
+  const handleDoddUpload = () => {
+    if (doddPendingFile) {
+      setDoddFile(doddPendingFile);
+      setDoddPendingFile(null);
+      setDoddUploadDialogOpen(false);
+    }
+  };
+
+  const handleDoddDownload = () => {
+    if (!doddFile) return;
+    const url = URL.createObjectURL(doddFile);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doddFile.name;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -118,6 +144,67 @@ export default function HomePage() {
                     </DialogContent>
                   </Dialog>
                   <Button size="sm" variant="outline" onClick={handleDownload} disabled={!scopingFile}>
+                    Download
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* DODD 7045.20 Button and Dialog */}
+          <Dialog open={doddDocumentOpen} onOpenChange={setDoddDocumentOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2 bg-transparent mt-2">
+                <FileText className="h-4 w-4" />
+                View DODD 7045.20 Capability Portfolio Management
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>DODD 7045.20 Capability Portfolio Management Document</DialogTitle>
+                <DialogDescription>Current DODD 7045.20 Capability Portfolio Management document</DialogDescription>
+              </DialogHeader>
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                {doddFile ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-base text-gray-800 font-medium">Current document:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="break-all">{doddFile.name}</span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const url = URL.createObjectURL(doddFile);
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        }}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 mb-4">
+                    Document placeholder - Replace with actual DODD 7045.20 Capability Portfolio Management content
+                  </p>
+                )}
+                <div className="flex gap-2 mt-4">
+                  <Button size="sm" onClick={() => setDoddUploadDialogOpen(true)}>
+                    Update Document
+                  </Button>
+                  <Dialog open={doddUploadDialogOpen} onOpenChange={setDoddUploadDialogOpen}>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Upload DODD 7045.20 Capability Portfolio Management</DialogTitle>
+                        <DialogDescription>Select a file to upload as the new DODD 7045.20 Capability Portfolio Management document.</DialogDescription>
+                      </DialogHeader>
+                      <Input type="file" accept=".pdf,.doc,.docx" onChange={e => setDoddPendingFile(e.target.files?.[0] || null)} />
+                      <div className="flex justify-end gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setDoddUploadDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleDoddUpload} disabled={!doddPendingFile}>Upload</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <Button size="sm" variant="outline" onClick={handleDoddDownload} disabled={!doddFile}>
                     Download
                   </Button>
                 </div>

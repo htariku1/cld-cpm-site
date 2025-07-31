@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useState } from "react"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { Calendar as UiCalendar } from "@/components/ui/calendar"
+import { format, parse } from "date-fns"
 
 interface MilestoneCardProps {
   milestone: any | null
@@ -20,14 +23,14 @@ interface MilestoneCardProps {
 }
 
 export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps) {
-  const { loes, tasks } = useData()
+  const { loes, tasks, deleteMilestone, updateMilestone } = useData()
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editFormData, setEditFormData] = useState({
     name: milestone?.name || "",
     date: milestone?.date || "",
     description: milestone?.description || "",
-    leadOrg: milestone?.leadOrg || "",
-    supportingOrg: milestone?.supportingOrg || "",
+    leadOrg: milestone?.leadOrg ? milestone.leadOrg.split(/, ?/) : [],
+    supportingOrg: milestone?.supportingOrg ? milestone.supportingOrg.split(/, ?/) : [],
     deliverable: milestone?.deliverable || "",
     associatedLOEs: milestone?.loeIds || [],
     associatedTasks: tasks.filter((task) => milestone?.loeIds?.includes(task.loeId)).map((task) => task.id),
@@ -39,13 +42,30 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
   const associatedLOEs = loes.filter((loe) => milestone.loeIds && milestone.loeIds.includes(loe.id))
   const associatedTasks = tasks.filter((task) => milestone.loeIds && milestone.loeIds.includes(task.loeId))
 
+  function getDurationInDays(start: string, end: string): number | null {
+    if (!start || !end) return null;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  }
+  const milestoneStart = milestone.date;
+  const milestoneEnd = milestone.date;
+  const duration = getDurationInDays(milestoneStart, milestoneEnd);
+
+  // Add a helper to validate required fields
+  function isValidMilestone(m: any) {
+    return m.name && m.date && m.description && m.leadOrg.length > 0 && m.supportingOrg.length > 0 && m.deliverable;
+  }
+
   const handleEdit = () => {
     setEditFormData({
       name: milestone.name,
       date: milestone.date,
       description: milestone.description,
-      leadOrg: milestone.leadOrg,
-      supportingOrg: milestone.supportingOrg,
+      leadOrg: milestone.leadOrg ? milestone.leadOrg.split(/, ?/) : [],
+      supportingOrg: milestone.supportingOrg ? milestone.supportingOrg.split(/, ?/) : [],
       deliverable: milestone.deliverable,
       associatedLOEs: milestone.loeIds || [],
       associatedTasks: tasks.filter((task) => milestone.loeIds && milestone.loeIds.includes(task.loeId)).map((task) => task.id),
@@ -54,8 +74,10 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
   }
 
   const handleDelete = () => {
-    console.log("Delete milestone:", milestone.id)
-    // TODO: Implement delete functionality
+    if (milestone) {
+      deleteMilestone(milestone.id)
+      onClose()
+    }
   }
 
   return (
@@ -66,7 +88,16 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
             <div className="relative flex items-start justify-between">
               <div className="flex-1">
                 <DialogTitle className="text-2xl font-bold text-gray-900 mb-2">{milestone.name}</DialogTitle>
-                <p className="text-sm text-gray-600">Due: {formatDate(milestone.date)}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">Start Date</span>
+                  <span className="text-sm text-gray-900">{milestoneStart ? formatDate(milestoneStart) : "—"}</span>
+                  <span className="mx-2 text-gray-400">—</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">End Date</span>
+                  <span className="text-sm text-gray-900">{milestoneEnd ? formatDate(milestoneEnd) : "—"}</span>
+                  <span className="mx-2 text-gray-400">—</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">Duration</span>
+                  <span className="text-sm text-gray-900">{duration} day{duration !== 1 ? "s" : ""}</span>
+                </div>
               </div>
               <div className="absolute right-4 top-4 z-20">
                 <DropdownMenu>
@@ -166,51 +197,97 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
               <DialogTitle>Edit Milestone</DialogTitle>
             </DialogHeader>
             <div className="space-y-6 mt-6">
-              <div>
-                <Label htmlFor="edit-milestone-name">Milestone Name</Label>
-                <Input
-                  id="edit-milestone-name"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-milestone-name">Milestone Name <span style={{color: 'red'}}>*</span></Label>
+                  <Input
+                    id="edit-milestone-name"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-milestone-date">Date <span style={{color: 'red'}}>*</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Input
+                        id="edit-milestone-date"
+                        value={editFormData.date ? format(parse(editFormData.date, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
+                        placeholder="Select date"
+                        readOnly
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <UiCalendar
+                        mode="single"
+                        selected={editFormData.date ? parse(editFormData.date, "yyyy-MM-dd", new Date()) : undefined}
+                        onSelect={d => setEditFormData(f => ({ ...f, date: d ? format(d, "yyyy-MM-dd") : "" }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Lead Org(s) <span style={{color: 'red'}}>*</span></Label>
+                  <div className="flex flex-row gap-2 mt-1">
+                    {["CPMR", "IAPR", "TMTR"].map(option => (
+                      <label key={option} className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.leadOrg.includes(option)}
+                          onChange={e => {
+                            const arr = editFormData.leadOrg
+                            if (e.target.checked) setEditFormData(f => ({ ...f, leadOrg: [...arr, option] }))
+                            else setEditFormData(f => ({ ...f, leadOrg: arr.filter((o: string) => o !== option) }))
+                          }}
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
+                  {editFormData.leadOrg && (
+                    <div className="text-xs text-gray-600 mt-1">
+                      <span className="font-semibold">Selected:</span> {editFormData.leadOrg.join(", ")}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Label>Supporting Org(s) <span style={{color: 'red'}}>*</span></Label>
+                  <div className="flex flex-row gap-2 mt-1">
+                    {["CPMR", "IAPR", "TMTR"].map(option => (
+                      <label key={option} className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.supportingOrg.includes(option)}
+                          onChange={e => {
+                            const arr = editFormData.supportingOrg
+                            if (e.target.checked) setEditFormData(f => ({ ...f, supportingOrg: [...arr, option] }))
+                            else setEditFormData(f => ({ ...f, supportingOrg: arr.filter((o: string) => o !== option) }))
+                          }}
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
+                  {editFormData.supportingOrg && (
+                    <div className="text-xs text-gray-600 mt-1">
+                      <span className="font-semibold">Selected:</span> {editFormData.supportingOrg.join(", ")}
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
-                <Label htmlFor="edit-milestone-date">Due Date</Label>
-                <Input
-                  id="edit-milestone-date"
-                  type="date"
-                  value={editFormData.date}
-                  onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-milestone-description">Description</Label>
+                <Label htmlFor="edit-milestone-description">Description <span style={{color: 'red'}}>*</span></Label>
                 <Textarea
                   id="edit-milestone-description"
                   value={editFormData.description}
                   onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-lead-org">Lead Organization</Label>
-                  <Input
-                    id="edit-lead-org"
-                    value={editFormData.leadOrg}
-                    onChange={(e) => setEditFormData({ ...editFormData, leadOrg: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-supporting-org">Supporting Organization</Label>
-                  <Input
-                    id="edit-supporting-org"
-                    value={editFormData.supportingOrg}
-                    onChange={(e) => setEditFormData({ ...editFormData, supportingOrg: e.target.value })}
-                  />
-                </div>
-              </div>
               <div>
-                <Label htmlFor="edit-deliverable">Deliverable</Label>
+                <Label htmlFor="edit-deliverable">Deliverable <span style={{color: 'red'}}>*</span></Label>
                 <Input
                   id="edit-deliverable"
                   value={editFormData.deliverable}
@@ -294,7 +371,20 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
               <div className="flex gap-2">
                 <Button
                   onClick={() => {
-                    console.log("Save milestone:", editFormData)
+                    if (!isValidMilestone(editFormData)) {
+                      alert('Please fill in all required fields.');
+                      return;
+                    }
+                    // Save milestone changes
+                    updateMilestone(milestone.id, {
+                      name: editFormData.name,
+                      date: editFormData.date,
+                      description: editFormData.description,
+                      leadOrg: editFormData.leadOrg.join(', '),
+                      supportingOrg: editFormData.supportingOrg.join(', '),
+                      deliverable: editFormData.deliverable,
+                      loeIds: editFormData.associatedLOEs,
+                    });
                     setEditDialogOpen(false)
                   }}
                 >
