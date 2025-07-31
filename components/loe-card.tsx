@@ -5,17 +5,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Calendar, Users, Target, CheckCircle, MoreHorizontal, Edit, Trash2 } from "lucide-react"
+import { Calendar, Users, Target, CheckCircle, MoreHorizontal, Edit, Trash2, AlertTriangle, Clock, FileText, Link, Tag } from "lucide-react"
 import { useData, type LOE } from "@/lib/data-context"
 import { formatDate, getHealthLabel, getHealthColor } from "@/lib/utils"
 import { calculateLOEHealth } from "@/lib/health-utils"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState, useRef } from "react"
-import { Checkbox } from "@/components/ui/checkbox"
-import { LOEForm } from "@/components/loe-form";
+import React, { useState } from "react"
+import { LOEForm } from "./loe-form"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface LOECardProps {
   loe: LOE | null
@@ -36,6 +41,7 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
   }
 
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   // For checkboxes, split comma-separated orgs into arrays
   const orgOptions = ["CPMR", "IAPR", "TMTR"]
   const [editName, setEditName] = useState(loe?.name || "")
@@ -70,10 +76,15 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
   }
 
   const handleDelete = () => {
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
     if (loe) {
       deleteLOE(loe.id)
       onClose()
     }
+    setDeleteDialogOpen(false)
   }
 
   // Add a helper to validate required fields
@@ -249,23 +260,42 @@ export function LOECard({ loe, isOpen, onClose }: LOECardProps) {
                 endDate: loe.endDate
               }}
               milestones={milestones}
-              onSubmit={(updatedLoe: any) => {
+              onSubmit={async (updatedLoe: any) => {
                 if (!isValidLOE(updatedLoe)) {
                   alert('Please fill in all required fields.');
                   return;
                 }
-                if (typeof updateTask === 'function') {
-                  updateTask(loe.id, updatedLoe);
-                } else {
-                  addLOE(updatedLoe);
+                try {
+                  if (typeof updateTask === 'function') {
+                    await updateTask(loe.id, updatedLoe);
+                  } else {
+                    await addLOE(updatedLoe);
+                  }
+                  setEditDialogOpen(false)
+                } catch (error) {
+                  console.error("Error updating LOE:", error);
                 }
-                setEditDialogOpen(false)
               }}
               onCancel={() => setEditDialogOpen(false)}
               submitLabel="Save Changes"
             />
           </DialogContent>
         </Dialog>
+        {/* Delete LOE Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete your LOE and remove its data from our servers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

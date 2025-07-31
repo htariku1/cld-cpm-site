@@ -79,9 +79,54 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
     )
   }, [loeIds, milestones])
 
+  // Validation state
+  const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
   // Handlers
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Clear previous errors
+    setErrors({})
+    
+    // Validate required fields
+    const newErrors: { [key: string]: string } = {}
+    
+    if (!name.trim()) {
+      newErrors.name = "Task name is required"
+    }
+    
+    if (assignedTypes.length === 0) {
+      newErrors.assignedTypes = "At least one assignee is required"
+    }
+    
+    if (!startDate) {
+      newErrors.startDate = "Start date is required"
+    }
+    
+    if (!endDate) {
+      newErrors.endDate = "End date is required"
+    }
+    
+    if (!description.trim()) {
+      newErrors.description = "Description is required"
+    }
+    
+    if (!deliverable.trim()) {
+      newErrors.deliverable = "Product is required"
+    }
+    
+    // Validate linked LOEs for formal tasks
+    if (type === "formal" && loeIds.length === 0) {
+      newErrors.loeIds = "Linked LOEs are required for formal tasks"
+    }
+    
+    // If there are errors, don't submit
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+    
     const task = {
       ...initialValues,
       id: mode === "add" ? uuidv4() : initialValues.id,
@@ -124,11 +169,20 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="task-name">Task Name <span style={{color: 'red'}}>*</span></Label>
-          <Input id="task-name" value={name} onChange={e => setName(e.target.value)} placeholder="Enter task name" />
+          <Input 
+            id="task-name" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            placeholder="Enter task name"
+            className={errors.name ? 'border-red-500' : ''}
+          />
+          {errors.name && (
+            <p className="text-red-500 text-sm mt-1">{errors.name}</p>
+          )}
         </div>
         <div>
           <Label>Assignee <span style={{color: 'red'}}>*</span></Label>
-          <div className="flex gap-2 mt-2">
+          <div className={`flex gap-2 mt-2 ${errors.assignedTypes ? 'border-red-500' : ''}`}>
             {["CPMR", "IAPR", "TMTR"].map((type) => (
               <div key={type} className="flex items-center space-x-2">
                 <Checkbox
@@ -146,6 +200,9 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
               </div>
             ))}
           </div>
+          {errors.assignedTypes && (
+            <p className="text-red-500 text-sm mt-1">{errors.assignedTypes}</p>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -158,6 +215,7 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
                 value={startDate ? format(parse(startDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
                 placeholder="Select start date"
                 readOnly
+                className={errors.startDate ? 'border-red-500' : ''}
               />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -171,6 +229,9 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
               />
             </PopoverContent>
           </Popover>
+          {errors.startDate && (
+            <p className="text-red-500 text-sm mt-1">{errors.startDate}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="add-end-date">End Date <span style={{color: 'red'}}>*</span></Label>
@@ -181,6 +242,7 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
                 value={endDate ? format(parse(endDate, "yyyy-MM-dd", new Date()), "MMMM dd, yyyy") : ""}
                 placeholder="Select end date"
                 readOnly
+                className={errors.endDate ? 'border-red-500' : ''}
               />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -194,16 +256,37 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
               />
             </PopoverContent>
           </Popover>
+          {errors.endDate && (
+            <p className="text-red-500 text-sm mt-1">{errors.endDate}</p>
+          )}
         </div>
       </div>
       <div>
         <Label htmlFor="task-desc">Description <span style={{color: 'red'}}>*</span></Label>
-        <Textarea id="task-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the task" />
+        <Textarea 
+          id="task-desc" 
+          value={description} 
+          onChange={e => setDescription(e.target.value)} 
+          placeholder="Describe the task"
+          className={errors.description ? 'border-red-500' : ''}
+        />
+        {errors.description && (
+          <p className="text-red-500 text-sm mt-1">{errors.description}</p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="task-product">Product <span style={{color: 'red'}}>*</span></Label>
-          <Input id="task-product" value={deliverable} onChange={e => setDeliverable(e.target.value)} placeholder="Enter product" />
+          <Input 
+            id="task-product" 
+            value={deliverable} 
+            onChange={e => setDeliverable(e.target.value)} 
+            placeholder="Enter product"
+            className={errors.deliverable ? 'border-red-500' : ''}
+          />
+          {errors.deliverable && (
+            <p className="text-red-500 text-sm mt-1">{errors.deliverable}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="task-status">Status</Label>
@@ -223,8 +306,11 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Linked LOEs</Label>
-          <div className="max-h-32 overflow-y-auto border rounded-md p-2 mt-2">
+          <Label>
+            Linked LOEs
+            {type === "formal" && <span style={{color: 'red'}}>*</span>}
+          </Label>
+          <div className={`max-h-32 overflow-y-auto border rounded-md p-2 mt-2 ${errors.loeIds ? 'border-red-500' : ''}`}>
             {loes.map((loe) => (
               <div key={loe.id} className="flex items-center space-x-2 py-1">
                 <Checkbox
@@ -244,6 +330,9 @@ export function TaskForm({ mode, initialValues = {}, onSubmit, onCancel, loes, m
               </div>
             ))}
           </div>
+          {errors.loeIds && (
+            <p className="text-red-500 text-sm mt-1">{errors.loeIds}</p>
+          )}
         </div>
         <div>
           <Label>Associated Milestones</Label>

@@ -1,11 +1,10 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Calendar, Users, Target, MoreHorizontal, Edit, Trash2 } from "lucide-react"
+import { MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { useData } from "@/lib/data-context"
 import { formatDate } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -15,6 +14,16 @@ import { useState } from "react"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar as UiCalendar } from "@/components/ui/calendar"
 import { format, parse } from "date-fns"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface MilestoneCardProps {
   milestone: any | null
@@ -25,6 +34,7 @@ interface MilestoneCardProps {
 export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps) {
   const { loes, tasks, deleteMilestone, updateMilestone } = useData()
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editFormData, setEditFormData] = useState({
     name: milestone?.name || "",
     date: milestone?.date || "",
@@ -74,10 +84,15 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
   }
 
   const handleDelete = () => {
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
     if (milestone) {
       deleteMilestone(milestone.id)
       onClose()
     }
+    setDeleteDialogOpen(false)
   }
 
   return (
@@ -397,6 +412,21 @@ export function MilestoneCard({ milestone, isOpen, onClose }: MilestoneCardProps
             </div>
           </DialogContent>
         </Dialog>
+        {/* Delete Milestone Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete your milestone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   )

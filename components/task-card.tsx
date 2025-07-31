@@ -12,13 +12,23 @@ import { formatDate } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
 import { Checkbox } from "@/components/ui/checkbox"
 import { useState, useEffect, useRef } from "react"
 import { TaskForm } from "@/components/task-form"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as UiCalendar } from "@/components/ui/calendar"
 import { format, parse } from "date-fns"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface TaskCardProps {
   task: any | null // Using any for now to handle legacy data
@@ -29,6 +39,7 @@ interface TaskCardProps {
 export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
   const { getDurationInDays, loes, milestones, deleteTask, updateTask } = useData()
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editFormData, setEditFormData] = useState({
     name: "",
     description: "",
@@ -51,19 +62,19 @@ export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
 
   // Handle legacy task data structure
   const normalizedTask = {
-    id: task.id,
-    name: task.name,
-    owner: task.owner,
+    id: task.id || "",
+    name: task.name || "",
+    owner: task.owner || "",
     loeId: task.loeId || "loe-1", // Default fallback
     loeIds: task.loeIds || (task.loeId ? [task.loeId] : []),
     associatedMilestones: task.associatedMilestones || [],
-    description: task.description,
-    startDate: task.startDate,
-    endDate: task.endDate,
-    status: task.status,
-    deliverable: task.deliverable,
+    description: task.description || "",
+    startDate: task.startDate || "",
+    endDate: task.endDate || "",
+    status: task.status || "Not Started", // Default status
+    deliverable: task.deliverable || "",
     type: task.type === "formal" || task.type === "informal" ? task.type : "formal",
-    assignedTypes: task.assignedTypes || [task.type?.toUpperCase()] || ["CPMR"], // Convert legacy type
+    assignedTypes: task.assignedTypes || (task.type ? [task.type.toUpperCase()] : ["CPMR"]), // Convert legacy type
     internalCoord: task.internalCoord || [],
     externalCoord: task.externalCoord || [],
     issues: Array.isArray(task.issues)
@@ -83,6 +94,10 @@ export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
   const linkedMilestones = milestones.filter((milestone: any) => normalizedTask.associatedMilestones.includes(milestone.id));
 
   const getStatusColor = (status: string) => {
+    if (!status || typeof status !== 'string') {
+      return "bg-gray-100 text-gray-800"
+    }
+    
     switch (status.toLowerCase()) {
       case "completed":
         return "bg-green-100 text-green-800"
@@ -119,8 +134,13 @@ export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
   }
 
   const handleDelete = () => {
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
     deleteTask(normalizedTask.id)
     onClose()
+    setDeleteDialogOpen(false)
   }
 
   // Replace isValidTask with a version that returns missing fields
@@ -181,6 +201,11 @@ export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
                 <Badge variant={normalizedTask.type === "formal" ? "default" : "secondary"}>
                   {normalizedTask.type === "formal" ? "Formal" : "Informal"}
                 </Badge>
+                {normalizedTask.category && (
+                  <Badge variant="secondary" className="capitalize">
+                    {normalizedTask.category}
+                  </Badge>
+                )}
               </div>
               <div className="absolute right-4 top-4 z-20">
                 <DropdownMenu>
@@ -432,6 +457,21 @@ export function TaskCard({ task, isOpen, onClose }: TaskCardProps) {
           )}
         </DialogContent>
       </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your task.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }
@@ -454,6 +494,11 @@ function InformalTaskCardContent({ task, onEdit, onDelete, onClose }: { task: an
             <div className="flex items-center gap-3 flex-1">
               <DialogTitle className="text-2xl font-bold text-gray-900">{task.name}</DialogTitle>
               <Badge variant="secondary">Informal</Badge>
+              {task.category && (
+                <Badge variant="secondary" className="capitalize">
+                  {task.category}
+                </Badge>
+              )}
             </div>
             <div className="absolute right-4 top-4 z-20">
               <DropdownMenu>

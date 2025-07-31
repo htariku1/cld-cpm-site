@@ -14,23 +14,27 @@ import { useData } from "@/lib/data-context"
 import { useRouter } from "next/navigation"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
-export default function SustainmentPage() {
+// Update the deploymentData to have more comprehensive task information
+// Remove deploymentData
+
+// Make sure the component is properly exported
+export default function DeploymentPage() {
   const router = useRouter();
   const [expandedLOE, setExpandedLOE] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [remediesOpen, setRemediesOpen] = useState<string | null>(null) // loeId for modal
   const [editingRemedy, setEditingRemedy] = useState<{ [issueKey: string]: string }>({})
   const [openRemedyInput, setOpenRemedyInput] = useState<string | null>(null)
-  const { loes, tasks, updateTask } = useData();
+  const { loes, tasks, loading, updateTask } = useData();
 
-  // Filter LOEs for sustainment category (if needed)
-  const sustainmentLOEs = loes.filter(loe => {
+  // Filter LOEs for deployment category (if needed)
+  const deploymentLOEs = loes.filter(loe => {
     // Optionally filter by category if you add it to LOE, or just use all
     return true;
   });
 
   // For each LOE, filter tasks by loeId and category
-  const getTasksForLOE = (loeId: string) => tasks.filter(task => task.loeId === loeId && task.category === "sustainment");
+  const getTasksForLOE = (loeId: string) => tasks.filter(task => task.loeId === loeId && (task.category === "deployment" || !task.category));
 
   // Calculate health and task counts for CPMR, IAPR, TMTR
   const getOrgStats = (loeTasks: any[], org: string) => {
@@ -45,6 +49,20 @@ export default function SustainmentPage() {
     };
   };
 
+  // Only include tasks whose loeId matches a deployment LOE
+  const deploymentLOEIds = deploymentLOEs.map(loe => loe.id);
+  const allDeploymentTasks = tasks.filter(
+    task => (task.category === "deployment" || !task.category) && deploymentLOEIds.includes(task.loeId)
+  );
+  // Use inferred health for each org
+  const cpmrHealthData = allDeploymentTasks.filter(task => (task.assignedTypes || []).includes("CPMR"));
+  const iaprHealthData = allDeploymentTasks.filter(task => (task.assignedTypes || []).includes("IAPR"));
+  const tmtrHealthData = allDeploymentTasks.filter(task => (task.assignedTypes || []).includes("TMTR"));
+  const cpmrHealth = calculateComponentHealth(cpmrHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: (task.issues || []).map(issue => issue.text) }), taskCount: 1 })));
+  const iaprHealth = calculateComponentHealth(iaprHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: (task.issues || []).map(issue => issue.text) }), taskCount: 1 })));
+  const tmtrHealth = calculateComponentHealth(tmtrHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: (task.issues || []).map(issue => issue.text) }), taskCount: 1 })));
+  const overallHealth = calculateOverallHealth(cpmrHealth, iaprHealth, tmtrHealth);
+
   // Helper function to calculate duration in days
   const getDurationInDays = (startDate: string, endDate: string): number => {
     const start = new Date(startDate)
@@ -53,79 +71,80 @@ export default function SustainmentPage() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
 
-  // Only include tasks whose loeId matches a sustainment LOE
-  const sustainmentLOEIds = sustainmentLOEs.map(loe => loe.id);
-  const allSustainmentTasks = tasks.filter(
-    task => task.category === "sustainment" && sustainmentLOEIds.includes(task.loeId)
-  );
-  // Use inferred health for each org
-  const cpmrHealthData = allSustainmentTasks.filter(task => (task.assignedTypes || []).includes("CPMR"));
-  const iaprHealthData = allSustainmentTasks.filter(task => (task.assignedTypes || []).includes("IAPR"));
-  const tmtrHealthData = allSustainmentTasks.filter(task => (task.assignedTypes || []).includes("TMTR"));
-  const cpmrHealth = calculateComponentHealth(cpmrHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: task.issues.map(issue => issue.text) }), taskCount: 1 })));
-  const iaprHealth = calculateComponentHealth(iaprHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: task.issues.map(issue => issue.text) }), taskCount: 1 })));
-  const tmtrHealth = calculateComponentHealth(tmtrHealthData.map(task => ({ health: inferTaskHealth({ ...task, issues: task.issues.map(issue => issue.text) }), taskCount: 1 })));
-  const overallHealth = calculateOverallHealth(cpmrHealth, iaprHealth, tmtrHealth);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <main className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading deployment data...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Sustainment</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Deployment</h1>
 
-        {/* Health Status Summary - you can implement this using context data if needed */}
+        {/* Health Status Summary */}
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Health Status Summary</CardTitle>
-            <CardDescription>Overall health status of sustainment capabilities</CardDescription>
+            <CardDescription>Overall health status of deployment capabilities</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-gray-50 p-4 rounded-lg border">
                 <h3 className="text-lg font-medium mb-2">Overall Health</h3>
                 <div className="flex items-center justify-between">
-                  <Badge className={`py-1 px-3 ${getHealthColor(overallHealth)}`}>{healthToLabel(overallHealth)}</Badge>
+                  <Badge className={`py-1 px-3 ${getHealthColor(overallHealth)}`}>{getHealthLabel(overallHealth)}</Badge>
                   <span className="text-sm text-gray-500">System-wide</span>
                 </div>
               </div>
               <div
                 className="bg-gray-50 p-4 rounded-lg border cursor-pointer hover:bg-gray-100"
-                onClick={() => router.push("/sustainment/cpmr")}
+                onClick={() => router.push("/deployment/cpmr")}
                 role="button"
                 tabIndex={0}
-                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/sustainment/cpmr") }}
-                aria-label="Go to CPMR sustainment page"
+                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/deployment/cpmr") }}
+                aria-label="Go to CPMR deployment page"
               >
                 <h3 className="text-lg font-medium mb-2">CPMR</h3>
                 <div className="flex items-center justify-between">
-                  <Badge className={`py-1 px-3 ${getHealthColor(cpmrHealth)}`}>{healthToLabel(cpmrHealth)}</Badge>
+                  <Badge className={`py-1 px-3 ${getHealthColor(cpmrHealth)}`}>{getHealthLabel(cpmrHealth)}</Badge>
                   <span className="text-sm text-gray-500">{cpmrHealthData.length} tasks</span>
                 </div>
               </div>
               <div
                 className="bg-gray-50 p-4 rounded-lg border cursor-pointer hover:bg-gray-100"
-                onClick={() => router.push("/sustainment/iapr")}
+                onClick={() => router.push("/deployment/iapr")}
                 role="button"
                 tabIndex={0}
-                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/sustainment/iapr") }}
-                aria-label="Go to IAPR sustainment page"
+                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/deployment/iapr") }}
+                aria-label="Go to IAPR deployment page"
               >
                 <h3 className="text-lg font-medium mb-2">IAPR</h3>
                 <div className="flex items-center justify-between">
-                  <Badge className={`py-1 px-3 ${getHealthColor(iaprHealth)}`}>{healthToLabel(iaprHealth)}</Badge>
+                  <Badge className={`py-1 px-3 ${getHealthColor(iaprHealth)}`}>{getHealthLabel(iaprHealth)}</Badge>
                   <span className="text-sm text-gray-500">{iaprHealthData.length} tasks</span>
                 </div>
               </div>
               <div
                 className="bg-gray-50 p-4 rounded-lg border cursor-pointer hover:bg-gray-100"
-                onClick={() => router.push("/sustainment/tmtr")}
+                onClick={() => router.push("/deployment/tmtr")}
                 role="button"
                 tabIndex={0}
-                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/sustainment/tmtr") }}
-                aria-label="Go to TMTR sustainment page"
+                onKeyPress={e => { if (e.key === "Enter" || e.key === " ") router.push("/deployment/tmtr") }}
+                aria-label="Go to TMTR deployment page"
               >
                 <h3 className="text-lg font-medium mb-2">TMTR</h3>
                 <div className="flex items-center justify-between">
-                  <Badge className={`py-1 px-3 ${getHealthColor(tmtrHealth)}`}>{healthToLabel(tmtrHealth)}</Badge>
+                  <Badge className={`py-1 px-3 ${getHealthColor(tmtrHealth)}`}>{getHealthLabel(tmtrHealth)}</Badge>
                   <span className="text-sm text-gray-500">{tmtrHealthData.length} tasks</span>
                 </div>
               </div>
@@ -133,8 +152,9 @@ export default function SustainmentPage() {
           </CardContent>
         </Card>
 
+        {/* Health Status Summary - you can implement this using context data if needed */}
         <div className="space-y-4">
-          {sustainmentLOEs.map((loe) => {
+          {deploymentLOEs.map((loe) => {
             const loeTasks = getTasksForLOE(loe.id);
             const cpmr = getOrgStats(loeTasks, "CPMR");
             const iapr = getOrgStats(loeTasks, "IAPR");
@@ -262,9 +282,9 @@ export default function SustainmentPage() {
                                     <div className="md:w-2/3 flex flex-row">
                                       {/* Issues Column */}
                                       <div className="w-1/2 flex flex-col justify-center px-0 md:px-4 md:border-r bg-red-50 rounded-md py-2">
-                                        {task.issues.length > 0 ? (
+                                        {(task.issues || []).length > 0 ? (
                                           <ul className="list-disc ml-6 text-sm text-gray-700">
-                                            {task.issues.map((issue, idx) => (
+                                            {(task.issues || []).map((issue, idx) => (
                                               <li key={idx} className="mb-2 flex items-center min-h-[2.5rem]">{/* min-h for alignment */}
                                                 <span>{issue.text}</span>
                                               </li>
@@ -278,9 +298,9 @@ export default function SustainmentPage() {
                                       </div>
                                       {/* Remedy Column */}
                                       <div className="w-1/2 flex flex-col justify-center pl-0 md:pl-4 bg-green-50 rounded-md py-2">
-                                        {task.issues.length > 0 ? (
+                                        {(task.issues || []).length > 0 ? (
                                           <ul className="list-none ml-0 text-sm text-gray-700">
-                                            {task.issues.map((issue, idx) => (
+                                            {(task.issues || []).map((issue, idx) => (
                                               <li key={idx} className="mb-2 flex items-center min-h-[2.5rem]">{/* min-h for alignment */}
                                                 {openRemedyInput === `${task.id}-${idx}` ? (
                                                   <>
@@ -295,7 +315,7 @@ export default function SustainmentPage() {
                                                       size="sm"
                                                       onClick={() => {
                                                         // Update the remedy for this issue
-                                                        const updatedIssues = task.issues.map((iss, i) =>
+                                                        const updatedIssues = (task.issues || []).map((iss, i) =>
                                                           i === idx ? { ...iss, remedy: editingRemedy[`${task.id}-${idx}`] ?? "" } : iss
                                                         );
                                                         updateTask(task.id, { issues: updatedIssues });
@@ -326,7 +346,7 @@ export default function SustainmentPage() {
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                           onClick={() => {
-                                                            const updatedIssues = task.issues.map((iss, i) =>
+                                                            const updatedIssues = (task.issues || []).map((iss, i) =>
                                                               i === idx ? { ...iss, remedy: undefined } : iss
                                                             );
                                                             updateTask(task.id, { issues: updatedIssues });

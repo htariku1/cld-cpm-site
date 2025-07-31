@@ -1,6 +1,8 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode, useEffect } from "react"
+import { loeService, taskService, milestoneService, initializeDatabase } from "./firebase-service"
+import { documentsService, DocumentMetadata } from "./documents-service"
 
 export interface Task {
   id: string
@@ -20,7 +22,6 @@ export interface Task {
   issues: { text: string, remedy?: string }[]
   requirements?: string // optional field for sustainment tasks
   remedy?: string // optional field for remedy/solution
-  dependsOn?: string[] // IDs of tasks/milestones this task depends on
 }
 
 export interface Milestone {
@@ -32,7 +33,6 @@ export interface Milestone {
   supportingOrg: string
   deliverable: string
   loeIds: string[]
-  dependsOn?: string[] // IDs of tasks/milestones this milestone depends on
 }
 
 export interface LOE {
@@ -47,22 +47,26 @@ export interface LOE {
   cpmrContributions: string
   iaprContributions: string
   tmtrContributions: string
-  taskIds: string[]
-  milestoneIds: string[]
+  // Removed overallHealth
 }
 
 interface DataContextType {
   loes: LOE[]
   tasks: Task[]
   milestones: Milestone[]
-  addLOE: (loe: LOE) => void
-  addTask: (task: Task) => void
-  addMilestone: (milestone: Milestone) => void
-  updateTask: (id: string, updates: Partial<Task>) => void // NEW
-  updateMilestone: (id: string, updates: Partial<Milestone>) => void
-  deleteLOE: (id: string) => void
-  deleteTask: (id: string) => void
-  deleteMilestone: (id: string) => void
+  documents: DocumentMetadata[]
+  loading: boolean
+  addLOE: (loe: Omit<LOE, 'id'>) => Promise<void>
+  addTask: (task: Omit<Task, 'id'>) => Promise<void>
+  addMilestone: (milestone: Omit<Milestone, 'id'>) => Promise<void>
+  updateTask: (id: string, updates: Partial<Task>) => Promise<void>
+  updateMilestone: (id: string, updates: Partial<Milestone>) => Promise<void>
+  deleteLOE: (id: string) => Promise<void>
+  deleteTask: (id: string) => Promise<void>
+  deleteMilestone: (id: string) => Promise<void>
+  uploadDocument: (file: File, type: "scoping" | "dodd") => Promise<void>
+  downloadDocument: (id: string) => Promise<File | null>
+  deleteDocument: (id: string) => Promise<void>
   calculateOverallHealth: (loeId: string) => "Good" | "At Risk" | "Critical"
   getTaskCountForLOE: (loeId: string) => number
   getDurationInDays: (startDate: string, endDate: string) => number
@@ -76,129 +80,160 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loes, setLOEs] = useState<LOE[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
+  const [documents, setDocuments] = useState<DocumentMetadata[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Load from localStorage on mount
+  // Initialize Firebase and load data
   useEffect(() => {
-    try {
-      const storedLOEs = localStorage.getItem("portfolio_loes")
-      if (storedLOEs) setLOEs(JSON.parse(storedLOEs))
-    } catch (e) {
-      console.error('Failed to parse LOEs from localStorage', e)
-      setLOEs([])
+    const initializeData = async () => {
+      try {
+        // Initialize database with sample data if empty
+        await initializeDatabase()
+        
+        // Set up real-time listeners
+        const unsubscribeLOEs = loeService.subscribe((data) => {
+          setLOEs(data)
+        })
+        
+        const unsubscribeTasks = taskService.subscribe((data) => {
+          setTasks(data)
+        })
+        
+        const unsubscribeMilestones = milestoneService.subscribe((data) => {
+          setMilestones(data)
+        })
+        
+        const unsubscribeDocuments = documentsService.subscribe((data) => {
+          setDocuments(data)
+        })
+        
+        setLoading(false)
+        
+        // Cleanup listeners on unmount
+        return () => {
+          unsubscribeLOEs()
+          unsubscribeTasks()
+          unsubscribeMilestones()
+          unsubscribeDocuments()
+        }
+      } catch (error) {
+        console.error("Error initializing data:", error)
+        setLoading(false)
+      }
     }
-    try {
-      const storedTasks = localStorage.getItem("portfolio_tasks")
-      if (storedTasks) setTasks(JSON.parse(storedTasks))
-    } catch (e) {
-      console.error('Failed to parse Tasks from localStorage', e)
-      setTasks([])
-    }
-    try {
-      const storedMilestones = localStorage.getItem("portfolio_milestones")
-      if (storedMilestones) setMilestones(JSON.parse(storedMilestones))
-    } catch (e) {
-      console.error('Failed to parse Milestones from localStorage', e)
-      setMilestones([])
-    }
+
+    initializeData()
   }, [])
 
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem("portfolio_loes", JSON.stringify(loes))
-  }, [loes])
-  useEffect(() => {
-    localStorage.setItem("portfolio_tasks", JSON.stringify(tasks))
-  }, [tasks])
-  useEffect(() => {
-    localStorage.setItem("portfolio_milestones", JSON.stringify(milestones))
-  }, [milestones])
-
-  const addLOE = (loe: LOE) => {
-    setLOEs((prev) => [...prev, { ...loe, taskIds: loe.taskIds || [], milestoneIds: loe.milestoneIds || [] }])
+  const addLOE = async (loe: Omit<LOE, 'id'>) => {
+    try {
+      await loeService.add(loe)
+    } catch (error) {
+      console.error("Error adding LOE:", error)
+      throw error
+    }
   }
 
-  const addTask = (task: Task) => {
-    setTasks((prev) => [...prev, task])
-    setLOEs((prev) => prev.map(loe => loe.id === task.loeId ? { ...loe, taskIds: [...(loe.taskIds || []), task.id] } : loe))
+  const addTask = async (task: Omit<Task, 'id'>) => {
+    try {
+      await taskService.add(task)
+    } catch (error) {
+      console.error("Error adding task:", error)
+      throw error
+    }
   }
 
-  const addMilestone = (milestone: Milestone) => {
-    setMilestones((prev) => [...prev, milestone])
-    setLOEs((prev) => prev.map(loe => milestone.loeIds.includes(loe.id) ? { ...loe, milestoneIds: [...(loe.milestoneIds || []), milestone.id] } : loe))
+  const addMilestone = async (milestone: Omit<Milestone, 'id'>) => {
+    try {
+      await milestoneService.add(milestone)
+    } catch (error) {
+      console.error("Error adding milestone:", error)
+      throw error
+    }
   }
 
   // NEW: updateTask implementation
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, ...updates } : task))
-    )
-    // If loeId changes, update LOE taskIds arrays
-    setLOEs((prev) => {
-      let oldLoeId: string | undefined;
-      prev.forEach(loe => {
-        if (loe.taskIds.includes(id)) oldLoeId = loe.id;
-      });
-      return prev.map(loe => {
-        // Remove from old LOE
-        if (oldLoeId && loe.id === oldLoeId && updates.loeId && updates.loeId !== oldLoeId) {
-          return { ...loe, taskIds: loe.taskIds.filter(tid => tid !== id) };
-        }
-        // Add to new LOE
-        if (updates.loeId && loe.id === updates.loeId && (!loe.taskIds.includes(id))) {
-          return { ...loe, taskIds: [...loe.taskIds, id] };
-        }
-        return loe;
-      });
-    });
-  }
-
-  const updateMilestone = (id: string, updates: Partial<Milestone>) => {
-    setMilestones((prev) =>
-      prev.map((milestone) => (milestone.id === id ? { ...milestone, ...updates } : milestone))
-    )
-    // If loeIds change, update LOE milestoneIds arrays
-    if (updates.loeIds) {
-      setLOEs((prev) => {
-        return prev.map(loe => {
-          // Remove milestone from LOEs no longer associated
-          const wasLinked = prev.find(l => l.id === loe.id)?.milestoneIds.includes(id);
-          const shouldBeLinked = updates.loeIds?.includes(loe.id);
-          if (wasLinked && !shouldBeLinked) {
-            return { ...loe, milestoneIds: loe.milestoneIds.filter(mid => mid !== id) };
-          }
-          // Add milestone to new LOEs
-          if (!wasLinked && shouldBeLinked) {
-            return { ...loe, milestoneIds: [...loe.milestoneIds, id] };
-          }
-          return loe;
-        });
-      });
+  const updateTask = async (id: string, updates: Partial<Task>) => {
+    try {
+      await taskService.update(id, updates)
+    } catch (error) {
+      console.error("Error updating task:", error)
+      throw error
     }
   }
 
-  const deleteLOE = (id: string) => {
-    setLOEs((prev) => prev.filter((loe) => loe.id !== id))
-    // Remove all tasks associated with this LOE
-    setTasks((prev) => prev.filter((task) => task.loeId !== id))
-    // For milestones, remove this LOE from loeIds, and delete milestone if it becomes orphaned
-    setMilestones((prev) => prev
-      .map((milestone) => ({ ...milestone, loeIds: milestone.loeIds.filter(lid => lid !== id) }))
-      .filter((milestone) => milestone.loeIds.length > 0)
-    );
+  const updateMilestone = async (id: string, updates: Partial<Milestone>) => {
+    try {
+      await milestoneService.update(id, updates)
+    } catch (error) {
+      console.error("Error updating milestone:", error)
+      throw error
+    }
   }
-  const deleteTask = (id: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== id))
-    setLOEs((prev) => prev.map(loe => ({ ...loe, taskIds: loe.taskIds.filter(tid => tid !== id) })))
-    // Remove this task from any dependsOn arrays in other tasks and milestones
-    setTasks((prev) => prev.map(task => ({ ...task, dependsOn: (task.dependsOn || []).filter(depId => depId !== id) })))
-    setMilestones((prev) => prev.map(milestone => ({ ...milestone, dependsOn: (milestone.dependsOn || []).filter(depId => depId !== id) })))
+
+  const deleteLOE = async (id: string) => {
+    try {
+      await loeService.delete(id)
+      // Also delete associated tasks and milestones
+      const associatedTasks = tasks.filter(task => task.loeId === id)
+      const associatedMilestones = milestones.filter(milestone => milestone.loeIds.includes(id))
+      
+      for (const task of associatedTasks) {
+        await taskService.delete(task.id)
+      }
+      for (const milestone of associatedMilestones) {
+        await milestoneService.delete(milestone.id)
+      }
+    } catch (error) {
+      console.error("Error deleting LOE:", error)
+      throw error
+    }
   }
-  const deleteMilestone = (id: string) => {
-    setMilestones((prev) => prev.filter((milestone) => milestone.id !== id))
-    setLOEs((prev) => prev.map(loe => ({ ...loe, milestoneIds: loe.milestoneIds.filter(mid => mid !== id) })))
-    // Remove this milestone from any dependsOn arrays in tasks and milestones
-    setTasks((prev) => prev.map(task => ({ ...task, dependsOn: (task.dependsOn || []).filter(depId => depId !== id) })))
-    setMilestones((prev) => prev.map(milestone => ({ ...milestone, dependsOn: (milestone.dependsOn || []).filter(depId => depId !== id) })))
+  
+  const deleteTask = async (id: string) => {
+    try {
+      await taskService.delete(id)
+    } catch (error) {
+      console.error("Error deleting task:", error)
+      throw error
+    }
+  }
+  
+  const deleteMilestone = async (id: string) => {
+    try {
+      await milestoneService.delete(id)
+    } catch (error) {
+      console.error("Error deleting milestone:", error)
+      throw error
+    }
+  }
+
+  // Document operations
+  const uploadDocument = async (file: File, type: "scoping" | "dodd") => {
+    try {
+      await documentsService.uploadDocument(file, type)
+    } catch (error) {
+      console.error("Error uploading document:", error)
+      throw error
+    }
+  }
+
+  const downloadDocument = async (id: string) => {
+    try {
+      return await documentsService.downloadDocument(id)
+    } catch (error) {
+      console.error("Error downloading document:", error)
+      throw error
+    }
+  }
+
+  const deleteDocument = async (id: string) => {
+    try {
+      await documentsService.deleteDocument(id)
+    } catch (error) {
+      console.error("Error deleting document:", error)
+      throw error
+    }
   }
 
   const calculateOverallHealth = (loeId: string): "Good" | "At Risk" | "Critical" => {
@@ -231,14 +266,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         loes,
         tasks,
         milestones,
+        documents,
+        loading,
         addLOE,
         addTask,
         addMilestone,
-        updateTask, // NEW
+        updateTask,
         updateMilestone,
         deleteLOE,
         deleteTask,
         deleteMilestone,
+        uploadDocument,
+        downloadDocument,
+        deleteDocument,
         calculateOverallHealth,
         getTaskCountForLOE,
         getDurationInDays,

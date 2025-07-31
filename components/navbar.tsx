@@ -4,12 +4,21 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, LogOut, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRef } from "react"
+import { useFirebaseAuth } from "@/lib/firebase-auth-context"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function Navbar() {
   const pathname = usePathname()
+  const { user, logout } = useFirebaseAuth()
   const [deploymentOpen, setDeploymentOpen] = useState(false)
   const [sustainmentOpen, setSustainmentOpen] = useState(false)
   // Add refs for close timeouts
@@ -149,6 +158,26 @@ export function Navbar() {
             Brief Generator
           </Link>
         </nav>
+
+        {/* User Menu */}
+        {user && (
+          <div className="ml-auto flex items-center space-x-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="flex items-center space-x-2">
+                  <User className="h-4 w-4" />
+                  <span className="hidden md:inline">{user.email}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={logout} className="flex items-center space-x-2">
+                  <LogOut className="h-4 w-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
     </header>
   )

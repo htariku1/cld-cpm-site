@@ -2,8 +2,10 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { Navbar } from "@/components/navbar"
 import { DataProvider } from "@/lib/data-context"
+import { FirebaseAuthProvider } from "@/lib/firebase-auth-context"
+import { ErrorBoundary, FirebaseErrorFallback } from "@/components/error-boundary"
+import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -21,10 +23,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <DataProvider>
-          <Navbar />
-          {children}
-        </DataProvider>
+        <ErrorBoundary fallback={FirebaseErrorFallback}>
+          <FirebaseAuthProvider>
+            <DataProvider>
+              {children}
+              <Toaster />
+            </DataProvider>
+          </FirebaseAuthProvider>
+        </ErrorBoundary>
       </body>
     </html>
   )

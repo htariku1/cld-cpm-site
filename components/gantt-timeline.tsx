@@ -81,9 +81,14 @@ export function GanttTimeline() {
         setTimelineWidth(timelineAreaRef.current.offsetWidth);
       }
     };
-    handleResize();
+    
+    // Use a small delay to ensure the DOM is ready
+    const timer = setTimeout(handleResize, 100);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    }
   }, [])
   // --- End hydration fix ---
 
@@ -158,7 +163,7 @@ export function GanttTimeline() {
 
               {/* LOE Rows */}
               <div className="space-y-8">
-                {timelineWidth > 0 && loes.map((loe, loeIndex) => {
+                {loes.map((loe, loeIndex) => {
                   const loeTasks = getTasksForLOE(loe.id)
                   const loeMilestones = getMilestonesForLOE(loe.id)
                   const loeDeliverables = getDeliverablesForLOE(loe.id)
@@ -209,8 +214,8 @@ export function GanttTimeline() {
                             </div>
                           )}
 
-                          {/* Tasks */}
-                          {loeTasks.map((task, taskIndex) => {
+                          {/* Tasks - only render if timelineWidth > 0 */}
+                          {timelineWidth > 0 && loeTasks.map((task, taskIndex) => {
                             const position = getTimelinePosition(task.startDate, task.endDate)
                             return (
                               <Tooltip key={task.id}>
@@ -264,8 +269,8 @@ export function GanttTimeline() {
                             )
                           })}
 
-                          {/* Milestones */}
-                          {loeMilestones.map((milestone) => {
+                          {/* Milestones - only render if timelineWidth > 0 */}
+                          {timelineWidth > 0 && loeMilestones.map((milestone) => {
                             const position = getTimelinePosition(milestone.date)
                             return (
                               <Tooltip key={milestone.id}>
@@ -306,8 +311,8 @@ export function GanttTimeline() {
                             )
                           })}
 
-                          {/* Deliverables (shown as diamonds near task end dates) */}
-                          {loeTasks.map((task, taskIndex) => {
+                          {/* Deliverables - only render if timelineWidth > 0 */}
+                          {timelineWidth > 0 && loeTasks.map((task, taskIndex) => {
                             if (
                               task.deliverable &&
                               task.deliverable.trim() !== "" &&

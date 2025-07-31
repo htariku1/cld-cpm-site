@@ -33,9 +33,13 @@ import { TaskForm } from "@/components/task-form"
 import { useRef } from "react"
 import { v4 as uuidv4 } from 'uuid'
 import { LOEForm } from "@/components/loe-form";
+import { useFirebaseToast, firebaseToastMessages } from "@/components/firebase-toast";
 
 export default function PortfolioManagementPage() {
-  const { loes, tasks, milestones, addTask, addLOE, addMilestone } = useData()
+  const { loes, tasks, milestones, loading, addTask, addLOE, addMilestone } = useData()
+  const { showSuccess, showError } = useFirebaseToast()
+  
+  // All useState hooks must be called before any conditional returns
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createType, setCreateType] = useState<"loe" | "milestone" | "task" | null>(null)
   const [taskType, setTaskType] = useState<"formal" | "informal" | null>(null)
@@ -56,6 +60,14 @@ export default function PortfolioManagementPage() {
   const [subtasks, setSubtasks] = useState<string[]>([])
   const [taskCategory, setTaskCategory] = useState<"deployment" | "sustainment" | "">("")
   const [activeTab, setActiveTab] = useState<string>("loes")
+  const [assignedTypes, setAssignedTypes] = useState<string[]>([])
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [loeIds, setLoeIds] = useState<string[]>([])
+  const [associatedMilestones, setAssociatedMilestones] = useState<string[]>([])
+  const [internalCoord, setInternalCoord] = useState<string[]>([])
+  const [externalCoord, setExternalCoord] = useState<string[]>([])
+
   // You can customize this list as needed
   const otherOrgOptions = ["DARPA", "DTRA", "NGA", "NSA", "DOE", "DHS"]
 
@@ -77,14 +89,19 @@ export default function PortfolioManagementPage() {
       "USTRANSCOM",
     ],
   }
-
-  const [assignedTypes, setAssignedTypes] = useState<string[]>([])
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-  const [loeIds, setLoeIds] = useState<string[]>([])
-  const [associatedMilestones, setAssociatedMilestones] = useState<string[]>([])
-  const [internalCoord, setInternalCoord] = useState<string[]>([])
-  const [externalCoord, setExternalCoord] = useState<string[]>([])
+  
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading portfolio data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const resetDialog = () => {
     setCreateDialogOpen(false)
@@ -164,11 +181,29 @@ export default function PortfolioManagementPage() {
               )}
 
               {createType === "loe" && (
-                <LOECreateForm onCreate={loe => { addLOE(loe); resetDialog(); }} onCancel={() => setCreateType(null)} />
+                <LOECreateForm onCreate={async (loe) => { 
+          try {
+            await addLOE(loe); 
+            showSuccess(firebaseToastMessages.loe.created);
+            resetDialog(); 
+          } catch (error) {
+            console.error("Error adding LOE:", error);
+            showError(firebaseToastMessages.loe.error, error instanceof Error ? error.message : "Unknown error");
+          }
+        }} onCancel={() => setCreateType(null)} />
               )}
 
               {createType === "milestone" && (
-                <MilestoneCreateForm loes={loes} onCreate={milestone => { addMilestone(milestone); resetDialog(); }} onCancel={() => setCreateType(null)} />
+                <MilestoneCreateForm loes={loes} onCreate={async (milestone) => { 
+                  try {
+                    await addMilestone(milestone); 
+                    showSuccess(firebaseToastMessages.milestone.created);
+                    resetDialog(); 
+                  } catch (error) {
+                    console.error("Error adding milestone:", error);
+                    showError(firebaseToastMessages.milestone.error, error instanceof Error ? error.message : "Unknown error");
+                  }
+                }} onCancel={() => setCreateType(null)} />
               )}
 
               {createType === "task" && !taskType && (
@@ -205,17 +240,33 @@ export default function PortfolioManagementPage() {
                   mode="add"
                   loes={loes}
                   milestones={milestones}
-                  onSubmit={(newTask) => {
-                    addTask(newTask);
-                    setActiveTab("tasks");
-                    resetDialog();
-                  }}
+                                      onSubmit={async (newTask) => {
+                      try {
+                        await addTask(newTask);
+                        showSuccess(firebaseToastMessages.task.created);
+                      } catch (error) {
+                        console.error("Error adding task:", error);
+                        showError(firebaseToastMessages.task.error, error instanceof Error ? error.message : "Unknown error");
+                      }
+                      setActiveTab("tasks");
+                      resetDialog();
+                    }}
                   onCancel={() => setTaskType(null)}
                 />
               )}
 
               {createType === "task" && taskType === "informal" && (
-                <InformalTaskForm onCreate={task => { addTask(task); setActiveTab("tasks"); resetDialog(); }} onCancel={() => setTaskType(null)} />
+                <InformalTaskForm onCreate={async (task) => { 
+                  try {
+                    await addTask(task); 
+                    showSuccess(firebaseToastMessages.task.created);
+                    setActiveTab("tasks"); 
+                    resetDialog(); 
+                  } catch (error) {
+                    console.error("Error adding task:", error);
+                    showError(firebaseToastMessages.task.error, error instanceof Error ? error.message : "Unknown error");
+                  }
+                }} onCancel={() => setTaskType(null)} />
               )}
             </DialogContent>
           </Dialog>
@@ -287,8 +338,15 @@ export default function PortfolioManagementPage() {
                                     >
                                       <div className="flex justify-between items-start">
                                         <div>
-                                          <h5 className="font-medium">{task.name}</h5>
-                                          <p className="text-xs text-gray-600">Assignee: {Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</p>
+                                          <div className="flex items-center gap-2">
+                                            <h5 className="font-medium">{task.name}</h5>
+                                            {task.category && (
+                                              <Badge variant="secondary" className="text-xs capitalize">
+                                                {task.category}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-gray-600 mt-1">Assignee: {Array.isArray(task.assignedTypes) && task.assignedTypes.length > 0 ? task.assignedTypes.join(', ') : task.owner}</p>
                                         </div>
                                         <Badge variant="outline">{task.status}</Badge>
                                       </div>
@@ -305,7 +363,11 @@ export default function PortfolioManagementPage() {
                               {getMilestonesForLOE(loe.id).length > 0 ? (
                                 <div className="space-y-2">
                                   {getMilestonesForLOE(loe.id).map((milestone) => (
-                                    <div key={milestone.id} className="border rounded-lg p-3">
+                                    <div 
+                                      key={milestone.id} 
+                                      className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
+                                      onClick={() => setSelectedMilestone(milestone)}
+                                    >
                                       <div className="flex items-center gap-2">
                                         <Calendar className="h-4 w-4 text-orange-500" />
                                         <h5 className="font-medium">{milestone.name}</h5>
@@ -390,7 +452,7 @@ export default function PortfolioManagementPage() {
                                     <Badge variant={task.type === "formal" ? "default" : "secondary"}>
                                       {task.type === "formal" ? "Formal" : "Informal"}
                                     </Badge>
-                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status || "Not Started"}</Badge>
                                   </div>
                                   <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
                                     View Details
@@ -446,7 +508,7 @@ export default function PortfolioManagementPage() {
                                     <Badge variant={task.type === "formal" ? "default" : "secondary"}>
                                       {task.type === "formal" ? "Formal" : "Informal"}
                                     </Badge>
-                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status || "Not Started"}</Badge>
                                   </div>
                                   <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
                                     View Details
@@ -502,7 +564,7 @@ export default function PortfolioManagementPage() {
                                     <Badge variant={task.type === "formal" ? "default" : "secondary"}>
                                       {task.type === "formal" ? "Formal" : "Informal"}
                                     </Badge>
-                                    <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                                    <Badge className={getStatusColor(task.status)}>{task.status || "Not Started"}</Badge>
                                   </div>
                                   <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
                                     View Details

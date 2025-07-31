@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +25,12 @@ export function LOEForm({
   onCancel: () => void,
   submitLabel: string
 }) {
-  const nameRef = useRef<HTMLInputElement>(null);
-  const descriptionRef = useRef<HTMLTextAreaElement>(null);
-  const cpmrRef = useRef<HTMLTextAreaElement>(null);
-  const iaprRef = useRef<HTMLTextAreaElement>(null);
-  const tmtrRef = useRef<HTMLTextAreaElement>(null);
+  // Convert all form fields to controlled components
+  const [name, setName] = useState(initialValues.name || "");
+  const [description, setDescription] = useState(initialValues.purpose || initialValues.description || "");
+  const [cpmrContributions, setCpmrContributions] = useState(initialValues.cpmrContributions || "");
+  const [iaprContributions, setIaprContributions] = useState(initialValues.iaprContributions || "");
+  const [tmtrContributions, setTmtrContributions] = useState(initialValues.tmtrContributions || "");
   const [deliverable, setDeliverable] = useState(initialValues.deliverable || "");
   const orgOptions = ["CPMR", "IAPR", "TMTR"];
   const [leadOrgs, setLeadOrgs] = useState<string[]>(initialValues.leadOrg ? initialValues.leadOrg.split(/, ?/) : []);
@@ -37,24 +38,34 @@ export function LOEForm({
   const [selectedMilestones, setSelectedMilestones] = useState<string[]>(initialValues.milestoneIds || []);
   const [startDate, setStartDate] = useState(initialValues.startDate || "");
   const [endDate, setEndDate] = useState(initialValues.endDate || "");
+
+  // Only update form values when initialValues actually changes (not on every render)
   useEffect(() => {
-    setDeliverable(initialValues.deliverable || "");
-    setLeadOrgs(initialValues.leadOrg ? initialValues.leadOrg.split(/, ?/) : []);
-    setSupportingOrgs(initialValues.supportingOrg ? initialValues.supportingOrg.split(/, ?/) : []);
-    setSelectedMilestones(initialValues.milestoneIds || []);
-    setStartDate(initialValues.startDate || "");
-    setEndDate(initialValues.endDate || "");
-    if (nameRef.current) nameRef.current.value = initialValues.name || "";
-    if (descriptionRef.current) descriptionRef.current.value = initialValues.purpose || initialValues.description || "";
-    if (cpmrRef.current) cpmrRef.current.value = initialValues.cpmrContributions || "";
-    if (iaprRef.current) iaprRef.current.value = initialValues.iaprContributions || "";
-    if (tmtrRef.current) tmtrRef.current.value = initialValues.tmtrContributions || "";
-  }, [initialValues]);
+    if (initialValues.id !== undefined) {
+      setName(initialValues.name || "");
+      setDescription(initialValues.purpose || initialValues.description || "");
+      setCpmrContributions(initialValues.cpmrContributions || "");
+      setIaprContributions(initialValues.iaprContributions || "");
+      setTmtrContributions(initialValues.tmtrContributions || "");
+      setDeliverable(initialValues.deliverable || "");
+      setLeadOrgs(initialValues.leadOrg ? initialValues.leadOrg.split(/, ?/) : []);
+      setSupportingOrgs(initialValues.supportingOrg ? initialValues.supportingOrg.split(/, ?/) : []);
+      setSelectedMilestones(initialValues.milestoneIds || []);
+      setStartDate(initialValues.startDate || "");
+      setEndDate(initialValues.endDate || "");
+    }
+  }, [initialValues.id]);
+
   return (
     <div className="space-y-4 mt-6">
       <div>
         <Label htmlFor="loe-name">LOE Name <span style={{color: 'red'}}>*</span></Label>
-        <Input id="loe-name" placeholder="Enter LOE name" ref={nameRef} defaultValue={initialValues.name || ""} />
+        <Input 
+          id="loe-name" 
+          placeholder="Enter LOE name" 
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
       </div>
       <div className="flex flex-row items-center gap-6 mt-1">
         <div>
@@ -154,23 +165,48 @@ export function LOEForm({
       </div>
       <div>
         <Label htmlFor="loe-purpose">Description <span style={{color: 'red'}}>*</span></Label>
-        <Textarea id="loe-purpose" placeholder="Describe the purpose of this LOE" ref={descriptionRef} defaultValue={initialValues.purpose || initialValues.description || ""} />
+        <Textarea 
+          id="loe-purpose" 
+          placeholder="Describe the purpose of this LOE" 
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="loe-deliverable">LOE Deliverable <span style={{color: 'red'}}>*</span></Label>
-        <Input id="loe-deliverable" placeholder="Enter LOE deliverable" value={deliverable} onChange={e => setDeliverable(e.target.value)} />
+        <Input 
+          id="loe-deliverable" 
+          placeholder="Enter LOE deliverable" 
+          value={deliverable} 
+          onChange={e => setDeliverable(e.target.value)} 
+        />
       </div>
       <div>
         <Label htmlFor="cpmr-contrib">CPMR Contributions</Label>
-        <Textarea id="cpmr-contrib" placeholder="Describe CPMR contributions" ref={cpmrRef} defaultValue={initialValues.cpmrContributions || ""} />
+        <Textarea 
+          id="cpmr-contrib" 
+          placeholder="Describe CPMR contributions" 
+          value={cpmrContributions}
+          onChange={(e) => setCpmrContributions(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="iapr-contrib">IAPR Contributions</Label>
-        <Textarea id="iapr-contrib" placeholder="Describe IAPR contributions" ref={iaprRef} defaultValue={initialValues.iaprContributions || ""} />
+        <Textarea 
+          id="iapr-contrib" 
+          placeholder="Describe IAPR contributions" 
+          value={iaprContributions}
+          onChange={(e) => setIaprContributions(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="tmtr-contrib">TMTR Contributions</Label>
-        <Textarea id="tmtr-contrib" placeholder="Describe TMTR contributions" ref={tmtrRef} defaultValue={initialValues.tmtrContributions || ""} />
+        <Textarea 
+          id="tmtr-contrib" 
+          placeholder="Describe TMTR contributions" 
+          value={tmtrContributions}
+          onChange={(e) => setTmtrContributions(e.target.value)}
+        />
       </div>
       <div>
         <Label>Associated Milestones</Label>
@@ -195,7 +231,7 @@ export function LOEForm({
             </div>
           )) : <p className="text-gray-500 text-sm text-center py-4">No milestones available.</p>}
         </div>
-        <p className="text-xs text-gray-500 mt-2">Select milestones that are directly associated with this LOE's deliverables and timeline.</p>
+        <p className="text-xs text-gray-500 mt-2">Select milestones that are directly associated with this LOE&apos;s deliverables and timeline.</p>
       </div>
       <div className="flex gap-2">
         <Button
@@ -203,16 +239,16 @@ export function LOEForm({
             const loe = {
               ...initialValues,
               id: initialValues.id || generateLoeId(),
-              name: nameRef.current?.value || "",
-              purpose: descriptionRef.current?.value || "",
+              name: name,
+              purpose: description,
               startDate: startDate || new Date().toISOString().slice(0, 10),
               endDate: endDate || new Date().toISOString().slice(0, 10),
               deliverable,
               leadOrg: leadOrgs.join(", "),
               supportingOrg: supportingOrgs.join(", "),
-              cpmrContributions: cpmrRef.current?.value || "",
-              iaprContributions: iaprRef.current?.value || "",
-              tmtrContributions: tmtrRef.current?.value || "",
+              cpmrContributions: cpmrContributions,
+              iaprContributions: iaprContributions,
+              tmtrContributions: tmtrContributions,
               milestoneIds: selectedMilestones,
             };
             onSubmit(loe);

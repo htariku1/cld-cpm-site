@@ -4,17 +4,17 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirebaseAuth } from "@/lib/firebase-auth-context"
 
-export default function RootPage() {
+interface ProtectedRouteProps {
+  children: React.ReactNode
+}
+
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useFirebaseAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.push("/home")
-      } else {
-        router.push("/login")
-      }
+    if (!loading && !user) {
+      router.push("/login")
     }
   }, [user, loading, router])
 
@@ -29,5 +29,9 @@ export default function RootPage() {
     )
   }
 
-  return null
-}
+  if (!user) {
+    return null
+  }
+
+  return <>{children}</>
+} 

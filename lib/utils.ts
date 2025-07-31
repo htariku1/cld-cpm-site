@@ -44,6 +44,10 @@ export function getHealthColor(health: string): string {
 }
 
 export function getStatusColor(status: string): string {
+  if (!status || typeof status !== 'string') {
+    return "bg-gray-100 text-gray-800"
+  }
+  
   switch (status.toLowerCase()) {
     case "completed":
       return "bg-green-100 text-green-800"

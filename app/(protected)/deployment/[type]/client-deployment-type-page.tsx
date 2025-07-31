@@ -6,13 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { TaskCard } from "@/components/task-card"
+
 import { formatDate } from "@/lib/utils"
 import { calculateLOEHealth } from "@/lib/health-utils"
 
 export function ClientDeploymentTypePage({ type }: { type: string }) {
   const [expandedLOE, setExpandedLOE] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<any>(null)
+
   const { loes, tasks } = useData();
 
   const typeLabels = {
